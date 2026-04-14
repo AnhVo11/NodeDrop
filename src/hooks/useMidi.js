@@ -35,7 +35,13 @@ export function parseMidi(buffer) {
       } else if (type === 0x80) {
         const note = d[p++]; p++;
         if (open[note]) { rawNotes.push({...open[note], endTick:tick, note}); delete open[note]; }
-      } else if (type===0xa0||type===0xb0||type===0xe0) { p+=2; }
+      } else if (type === 0xb0) {
+        // Control change — capture sustain pedal (CC 64)
+        const cc = d[p++], val = d[p++];
+        if (cc === 64) {
+          rawNotes.push({ tick, vel: val, endTick: tick, hand: 0, isPedal: true });
+        }
+      } else if (type===0xa0||type===0xe0) { p+=2; }
         else if (type===0xc0||type===0xd0) { p+=1; }
         else if (sb===0xff) {
           const mt = d[p++], ml = rvar();
@@ -59,13 +65,21 @@ export function parseMidi(buffer) {
     return sec + ((tk-lt)/div)*(lu/1e6);
   }
 
-  return rawNotes
-    .map(n => ({
+  return rawNotes.map(n => {
+    if (n.isPedal) return {
+      note: -1,
+      isPedal: true,
+      startTime: tick2sec(n.tick),
+      duration: 0,
+      vel: n.vel,
+      hand: 0,
+    };
+    return {
       note:      n.note,
       startTime: tick2sec(n.tick),
       duration:  tick2sec(n.endTick) - tick2sec(n.tick),
       vel:       n.vel / 127,
       hand:      n.hand,
-    }))
-    .sort((a,b) => a.startTime - b.startTime);
+    };
+  }).sort((a,b) => a.startTime - b.startTime);
 }

@@ -12,10 +12,14 @@ const styles = {
     textTransform: 'uppercase', opacity: 0.9,
   },
   controls: { display: 'flex', alignItems: 'center', gap: 10 },
-  tempoWrap: { display: 'flex', alignItems: 'center', gap: 6 },
+  sliderWrap: { display: 'flex', alignItems: 'center', gap: 6 },
   lbl: {
     color: 'rgba(201,168,76,0.6)', fontSize: 11,
     letterSpacing: 1, minWidth: 34, textAlign: 'right',
+  },
+  val: {
+    color: 'rgba(201,168,76,0.9)', fontSize: 11,
+    letterSpacing: 1, minWidth: 28, textAlign: 'left',
   },
   btn: {
     background: 'transparent',
@@ -30,7 +34,7 @@ const styles = {
     border: '1.5px solid rgba(201,168,76,0.35)',
     color: '#c9a84c', borderRadius: '50%',
     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    width: 44, height: 44, fontSize: 18,
+    width: 44, height: 44, fontSize: 16,
     WebkitTapHighlightColor: 'transparent',
   },
   loadBtn: {
@@ -55,35 +59,58 @@ export default function TopBar({
   isPlaying, onPlayPause, onRestart, onMidiLoad,
   tempo, onTempoChange,
   zoom, onZoomChange,
+  fullPedal, onToggleFullPedal,
   songTitle,
 }) {
+  // Convert tempo % to speed multiplier display e.g. 100% -> 1.0
+  const speedDisplay = (tempo / 100).toFixed(1);
+
   return (
     <>
       <div style={styles.bar}>
         <div style={styles.brand}>NoteDrop</div>
         <div style={styles.controls}>
 
-          {/* Tempo */}
-          <div style={styles.tempoWrap}>
-            <span style={styles.lbl}>{tempo}%</span>
+          {/* Speed */}
+          <div style={styles.sliderWrap}>
+            <span style={styles.lbl}>SPEED</span>
             <input
               type="range" min="25" max="200" value={tempo}
               onChange={e => onTempoChange(parseInt(e.target.value))}
-              style={{ width: 72, height: 2, accentColor: '#c9a84c' }}
+              style={{ width: 64, height: 2, accentColor: '#c9a84c' }}
             />
+            <span style={styles.val}>{speedDisplay}x</span>
           </div>
 
           <div style={styles.divider} />
 
           {/* Zoom */}
-          <div style={styles.tempoWrap}>
-            <span style={styles.lbl}>🔍</span>
+          <div style={styles.sliderWrap}>
+            <span style={styles.lbl}>ZOOM</span>
             <input
               type="range" min="100" max="400" value={zoom}
               onChange={e => onZoomChange(parseInt(e.target.value))}
-              style={{ width: 72, height: 2, accentColor: '#c9a84c' }}
+              style={{ width: 64, height: 2, accentColor: '#c9a84c' }}
             />
+            <span style={styles.val}>{zoom}%</span>
           </div>
+
+          <div style={styles.divider} />
+
+          {/* Full Sustain */}
+          <button
+            style={{
+              ...styles.btn,
+              background: fullPedal ? 'rgba(220,50,50,0.25)' : 'transparent',
+              border: fullPedal ? '1px solid rgba(220,50,50,0.7)' : '1px solid rgba(201,168,76,0.35)',
+              color: fullPedal ? '#ff6666' : 'rgba(201,168,76,0.5)',
+              fontSize: 9, letterSpacing: 1, borderRadius: 4,
+              width: 'auto', padding: '0 8px',
+            }}
+            onClick={onToggleFullPedal}
+          >
+            FULL SUSTAIN
+          </button>
 
           <div style={styles.divider} />
 
@@ -92,7 +119,7 @@ export default function TopBar({
 
           {/* Play/Pause */}
           <button style={styles.btnLarge} onClick={onPlayPause}>
-            {isPlaying ? '⏸' : '▶'}
+            {isPlaying ? '■' : '▶'}
           </button>
 
           {/* Load MIDI */}

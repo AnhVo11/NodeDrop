@@ -17,6 +17,7 @@ export default function PianoCanvas({
     activeKeys, setActiveKeys,
     scheduleNote, playNote, getCtx,
     onSongEnd, onScrub, zoom,
+    isPedalOn, hasPedal,
 }) {
     const canvasRef = useRef(null);
     const particlesRef = useRef([]);
@@ -29,7 +30,7 @@ export default function PianoCanvas({
     const scrubStartTime = useRef(0);
 
     const stateRef = useRef({});
-   
+
 
     stateRef.current = {
         noteObjs, isPlaying, playOffset, playStart,
@@ -316,6 +317,33 @@ export default function PianoCanvas({
                 activeKeys={stateRef.current.activeKeys}
                 audioTime={getCtx()?.currentTime ?? -1}
             />
+            {(
+                <div style={{
+                    position: 'absolute',
+                    bottom: KEY_H + 12,
+                    left: 16,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    pointerEvents: 'none',
+                }}>
+                    <div style={{
+                        width: 10, height: 10, borderRadius: '50%',
+                        background: isPedalOn ? '#ff3333' : 'rgba(255,255,255,0.1)',
+                        boxShadow: isPedalOn ? '0 0 8px rgba(255,50,50,0.8)' : 'none',
+                        transition: 'background 0.1s, box-shadow 0.1s',
+                    }} />
+                    <span style={{
+                        color: isPedalOn ? 'rgba(255,100,100,0.8)' : 'rgba(255,255,255,0.2)',
+                        fontSize: 10, letterSpacing: 2,
+                        textTransform: 'uppercase',
+                        transition: 'color 0.1s',
+                        fontFamily: 'Palatino',
+                    }}>
+                        SUSTAIN
+                    </span>
+                </div>
+            )}
         </div>
     );
 }
