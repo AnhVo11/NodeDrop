@@ -6,7 +6,6 @@ const MIN_NOTE = 21;
 const MAX_NOTE = 108;
 const KEY_H = 130;
 const BAR_H = 56;
-const LOOK_AHEAD_VIS = 4.5;
 const HANDLE_SIZE = 16;
 
 export default function EditOverlay({
@@ -22,6 +21,7 @@ export default function EditOverlay({
     leftColor,
     onScrub,
     songDuration,
+    lookAhead,
 }) {
     const [editTool, setEditTool] = useState(null);
     const [paintHand, setPaintHand] = useState(null); // null=off, 0=right, 1=left
@@ -38,6 +38,8 @@ export default function EditOverlay({
 
     const stateRef = useRef({});
     stateRef.current = { noteObjs, rightColor, leftColor };
+    const lookAheadRef = useRef(lookAhead);
+    useEffect(() => { lookAheadRef.current = lookAhead; }, [lookAhead]);
 
     useEffect(() => { editToolRef.current = editTool; }, [editTool]);
     useEffect(() => { paintHandRef.current = paintHand; }, [paintHand]);
@@ -45,6 +47,7 @@ export default function EditOverlay({
     const { pushUndo, undo, redo } = useEditHistory(onUpdateNotes, stateRef);
 
     // ---- Helpers ----
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const getNoteRect = useCallback((n, ch) => {
         const pw = getPianoWidth();
         const x = noteX(n.note, pw) - scrollX.current;
@@ -52,21 +55,22 @@ export default function EditOverlay({
         const ahead2 = n.startTime - currentTime();
         const ahead1 = (n.startTime + n.duration) - currentTime();
         const fallH = ch - KEY_H - BAR_H;
-        const y2 = BAR_H + fallH * (1 - ahead2 / LOOK_AHEAD_VIS);
-        const y1 = BAR_H + fallH * (1 - ahead1 / LOOK_AHEAD_VIS);
+        const y2 = BAR_H + fallH * (1 - ahead2 / lookAheadRef.current);
+        const y1 = BAR_H + fallH * (1 - ahead1 / lookAheadRef.current);
         return { x: x - w / 2, y: Math.min(y1, y2), w, h: Math.max(Math.abs(y2 - y1), 4) };
     }, [currentTime, getPianoWidth, scrollX]);
 
     // Convert song time to Y position
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const timeToY = useCallback((songTime, ch) => {
         const ahead = songTime - currentTime();
         const fallH = ch - KEY_H - BAR_H;
-        return BAR_H + fallH * (1 - ahead / LOOK_AHEAD_VIS);
+        return BAR_H + fallH * (1 - ahead / lookAheadRef.current);
     }, [currentTime]);
 
     function yToSongTime(y, ch) {
         const fallH = ch - KEY_H - BAR_H;
-        return currentTime() + (1 - (y - BAR_H) / fallH) * LOOK_AHEAD_VIS;
+        return currentTime() + (1 - (y - BAR_H) / fallH) * lookAheadRef.current;
     }
 
     function xToNote(x) {
@@ -196,7 +200,7 @@ export default function EditOverlay({
         const st = currentTime();
         const updated = noteObjs.filter(n => {
             if (n.isPedal || n.note < MIN_NOTE || n.note > MAX_NOTE) return true;
-            if (n.startTime > st + LOOK_AHEAD_VIS || n.startTime + n.duration < st - 0.2) return true;
+            if (n.startTime > st + lookAhead || n.startTime + n.duration < st - 0.2) return true;
             const r = getNoteRect(n, ch);
             if (r.y + r.h > ch - KEY_H + 10) return true;
             if (Math.max(x1, x2) < r.x || Math.min(x1, x2) > r.x + r.w) return true;
@@ -337,7 +341,7 @@ export default function EditOverlay({
             if (ia?.type === 'pedalMove') {
                 const fallH = ch - KEY_H - BAR_H;
                 const dy = y - ia.startY;
-                const timeDelta = -dy * LOOK_AHEAD_VIS / fallH;
+                const timeDelta = -dy * lookAheadRef.current / fallH;
                 const { noteObjs } = stateRef.current;
                 const updated = noteObjs.map((n, i) => {
                     if (i === ia.startIdx) return { ...n, startTime: Math.max(0, ia.origStartTime + timeDelta) };
@@ -351,7 +355,7 @@ export default function EditOverlay({
             if (ia?.type === 'pedalResize') {
                 const fallH = ch - KEY_H - BAR_H;
                 const dy = y - ia.startY;
-                const timeDelta = -dy * LOOK_AHEAD_VIS / fallH;
+                const timeDelta = -dy * lookAheadRef.current / fallH;
                 const { noteObjs } = stateRef.current;
                 const updated = noteObjs.map((n, i) => {
                     if (i !== ia.idx) return n;
@@ -400,7 +404,7 @@ export default function EditOverlay({
             const dy = y - ia.startY;
 
             if (ia.type === 'move') {
-                const timeDelta = -dy * LOOK_AHEAD_VIS / fallH;
+                const timeDelta = -dy * lookAheadRef.current / fallH;
                 const newNote = xToNote(x);
                 const updated = noteObjs.map((n, i) => {
                     if (i !== ia.noteIndex) return n;
@@ -415,7 +419,7 @@ export default function EditOverlay({
             }
 
             if (ia.type === 'resize') {
-                const delta = dy * LOOK_AHEAD_VIS / fallH;
+                const delta = dy * lookAhead / fallH;
                 const updated = noteObjs.map((n, i) => {
                     if (i !== ia.noteIndex) return n;
                     if (ia.zone === 'top') {
@@ -648,7 +652,7 @@ export default function EditOverlay({
             ctx.clip();
             noteObjs.forEach(n => {
                 if (n.isPedal || n.note < MIN_NOTE || n.note > MAX_NOTE) return;
-                if (n.startTime > st + LOOK_AHEAD_VIS + 0.2) return;
+                if (n.startTime > st + lookAheadRef.current + 0.2) return;
                 if (n.startTime + n.duration < st - 0.5) return;
                 const r = getNoteRect(n, ch);
                 if (r.x + r.w < 0 || r.x > cw || r.h < 8) return;

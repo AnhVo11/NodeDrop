@@ -29,6 +29,7 @@ export default function App() {
     const [editMode, setEditMode] = useState(false);
     const [loop, setLoop] = useState(false);
     const [hiddenHands, setHiddenHands] = useState({ 0: false, 1: false });
+    const [keyZoom, setKeyZoom] = useState(100);
 
     const stateRef = useRef({});
     stateRef.current = { isPlaying, playOffset, playStart, tempoScale };
@@ -271,6 +272,9 @@ export default function App() {
                 onSongEnd={handleSongEnd}
                 onScrub={handleScrub}
                 zoom={zoom}
+                onZoomChange={handleZoomChange}
+                keyZoom={keyZoom}
+                onKeyZoomChange={setKeyZoom}
                 isPedalOn={isPedalOn}
                 fullPedal={fullPedal}
                 onToggleFullPedal={() => setFullPedal(f => !f)}

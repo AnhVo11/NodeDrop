@@ -158,6 +158,7 @@ export default function TopBar({
     editMode,
 }) {
     const [gearOpen, setGearOpen] = useState(false);
+    const [speedActive, setSpeedActive] = useState(false);
     const gearRef = useRef(null);
     const speedDisplay = (tempo / 100).toFixed(1);
 
@@ -202,22 +203,17 @@ export default function TopBar({
                         <span style={styles.lbl}>SPEED</span>
                         <input type="range" min="25" max="200" value={tempo}
                             onChange={e => onTempoChange(parseInt(e.target.value))}
-                            style={{ width: 64, height: 2, accentColor: '#c9a84c' }} />
+                            onPointerDown={() => setSpeedActive(true)}
+                            onPointerUp={() => setSpeedActive(false)}
+                            onTouchStart={() => setSpeedActive(true)}
+                            onTouchEnd={() => setSpeedActive(false)}
+                            style={{
+                                width: speedActive ? 140 : 64,
+                                height: 2, accentColor: '#c9a84c',
+                                transition: 'width 0.3s ease',
+                            }} />
                         <span style={styles.val}>{speedDisplay}x</span>
                     </div>
-
-                    <div style={styles.divider} />
-
-                    {/* Zoom */}
-                    <div style={styles.sliderWrap}>
-                        <span style={styles.lbl}>VIEW</span>
-                        <input type="range" min="100" max="400" value={zoom}
-                            onChange={e => onZoomChange(parseInt(e.target.value))}
-                            style={{ width: 64, height: 2, accentColor: '#c9a84c' }} />
-                        <span style={styles.val}>{zoom}%</span>
-                    </div>
-
-                    <div style={styles.divider} />
 
                     {/* Hand Colors */}
                     <HandColorButton

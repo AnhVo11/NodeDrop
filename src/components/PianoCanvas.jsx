@@ -18,6 +18,7 @@ export default function PianoCanvas({
     onSongEnd, onScrub, zoom,
     isPedalOn, fullPedal, onToggleFullPedal,
     hiddenHands,
+    onZoomChange, keyZoom, onKeyZoomChange,
     rightColor, leftColor,
     songDuration,
     editMode, onExitEdit, onAddNote, onUpdateNotes,
@@ -29,18 +30,22 @@ export default function PianoCanvas({
     const isSeekingBar = useRef(false);
     const scrubStartY = useRef(0);
     const scrubStartTime = useRef(0);
+    const dragStartX = useRef(0);
+    const dragStartScrollX = useRef(0);
+    const dragDirectionRef = useRef(null); // 'h' or 'v'
     const fontSizeRef = useRef(15);
 
+    const pinchRef = useRef(null); // { initDist: {h, v}, initZoom: {key, view} }
     const stateRef = useRef({});
     const lookAhead = 4.5 + (zoom - 100) / 300 * Math.max(0, songDuration - 4.5);
     stateRef.current = {
         noteObjs, isPlaying, playOffset, playStart,
         tempoScale, scheduled, activeKeys, zoom,
-        rightColor, leftColor, editMode, hiddenHands, lookAhead,
+        rightColor, leftColor, editMode, hiddenHands, lookAhead, keyZoom,
     };
 
     const getPianoWidth = useCallback(
-        () => window.innerWidth,
+        () => window.innerWidth * (stateRef.current.keyZoom / 100),
         []
     );
 
@@ -87,6 +92,9 @@ export default function PianoCanvas({
             isScrubbing.current = true;
             scrubStartY.current = y;
             scrubStartTime.current = currentTime();
+            dragStartX.current = x;
+            dragStartScrollX.current = scrollX.current;
+            dragDirectionRef.current = null;
         };
 
         const onMove = (e) => {
@@ -98,7 +106,24 @@ export default function PianoCanvas({
                 return;
             }
             if (!isScrubbing.current) return;
+            const dx = x - dragStartX.current;
             const dy = y - scrubStartY.current;
+
+            if (!dragDirectionRef.current) {
+                if (Math.abs(dx) > Math.abs(dy) + 5) dragDirectionRef.current = 'h';
+                else if (Math.abs(dy) > Math.abs(dx) + 5) dragDirectionRef.current = 'v';
+                else return;
+            }
+
+            if (dragDirectionRef.current === 'h') {
+                const pw = stateRef.current.keyZoom > 100
+                    ? window.innerWidth * (stateRef.current.keyZoom / 100)
+                    : window.innerWidth;
+                const maxScroll = Math.max(0, pw - window.innerWidth);
+                scrollX.current = Math.max(0, Math.min(maxScroll, dragStartScrollX.current - dx));
+                return;
+            }
+
             const song = stateRef.current.noteObjs;
             const maxTime = song.length ? song[song.length - 1].startTime : 0;
             onScrub(Math.max(0, Math.min(maxTime, scrubStartTime.current + dy / PIXELS_PER_SECOND)));
@@ -109,6 +134,54 @@ export default function PianoCanvas({
             isSeekingBar.current = false;
         };
 
+        const onPinchStart = (e) => {
+            if (e.touches.length !== 2) return;
+            const t0 = e.touches[0], t1 = e.touches[1];
+            pinchRef.current = {
+                initH: Math.abs(t0.clientX - t1.clientX),
+                initV: Math.abs(t0.clientY - t1.clientY),
+                initKeyZoom: stateRef.current.keyZoom,
+                initViewZoom: stateRef.current.zoom,
+                direction: null,
+            };
+        };
+
+        const onPinchMove = (e) => {
+            if (e.touches.length !== 2 || !pinchRef.current) return;
+            e.preventDefault();
+            const t0 = e.touches[0], t1 = e.touches[1];
+            const curH = Math.abs(t0.clientX - t1.clientX);
+            const curV = Math.abs(t0.clientY - t1.clientY);
+            const p = pinchRef.current;
+
+            if (!p.direction) {
+                const dh = Math.abs(curH - p.initH);
+                const dv = Math.abs(curV - p.initV);
+                if (dh > 10 || dv > 10) {
+                    p.direction = dh >= dv ? 'h' : 'v';
+                } else return;
+            }
+
+            if (p.direction === 'h') {
+                const hScale = curH / Math.max(p.initH, 1);
+                const dampened = 1 + (hScale - 1) * 0.3;
+                const newKey = Math.min(400, Math.max(100, p.initKeyZoom * dampened));
+                onKeyZoomChange(Math.round(newKey));
+            } else {
+                const vScale = Math.max(p.initV, 1) / curV;
+                const dampened = 1 + (vScale - 1) * 0.3;
+                const newView = Math.min(400, Math.max(100, p.initViewZoom * dampened));
+                onZoomChange(Math.round(newView));
+            }
+        };
+
+        const onPinchEnd = (e) => {
+            if (e.touches.length < 2) pinchRef.current = null;
+        };
+
+        canvas.addEventListener('touchstart', onPinchStart, { passive: false });
+        canvas.addEventListener('touchmove', onPinchMove, { passive: false });
+        canvas.addEventListener('touchend', onPinchEnd, { passive: true });
         canvas.addEventListener('touchstart', onStart, { passive: false });
         canvas.addEventListener('touchmove', onMove, { passive: false });
         canvas.addEventListener('touchend', onEnd, { passive: true });
@@ -117,6 +190,9 @@ export default function PianoCanvas({
         canvas.addEventListener('mouseup', onEnd, { passive: true });
 
         return () => {
+            canvas.removeEventListener('touchstart', onPinchStart);
+            canvas.removeEventListener('touchmove', onPinchMove);
+            canvas.removeEventListener('touchend', onPinchEnd);
             canvas.removeEventListener('touchstart', onStart);
             canvas.removeEventListener('touchmove', onMove);
             canvas.removeEventListener('touchend', onEnd);
@@ -124,6 +200,7 @@ export default function PianoCanvas({
             canvas.removeEventListener('mousemove', onMove);
             canvas.removeEventListener('mouseup', onEnd);
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentTime, onScrub, songDuration]);
 
     // ---- Schedule ahead ----
@@ -406,6 +483,7 @@ export default function PianoCanvas({
                     leftColor={leftColor}
                     onScrub={onScrub}
                     songDuration={songDuration}
+                    lookAhead={stateRef.current.lookAhead}
                 />
             )}
         </div>
