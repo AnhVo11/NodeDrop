@@ -29,6 +29,7 @@ export default function PianoCanvas({
     const isSeekingBar = useRef(false);
     const scrubStartY = useRef(0);
     const scrubStartTime = useRef(0);
+    const fontSizeRef = useRef(15);
 
     const stateRef = useRef({});
     stateRef.current = {
@@ -73,9 +74,12 @@ export default function PianoCanvas({
         const onStart = (e) => {
             if (stateRef.current.editMode) return;
             if (e.touches) e.preventDefault();
-            const { y } = getXY(e);
+            const { x, y } = getXY(e);
             const barY = BAR_H;
-            if (y >= barY - 4 && y <= barY + 14) {
+            const prog = Math.min(1, Math.max(0, currentTime() / songDuration));
+            const dotX = Math.max(8, canvas.width * prog);
+            const nearDot = Math.abs(x - dotX) <= 20 && y >= barY - 8 && y <= barY + 14;
+            if (nearDot) {
                 isSeekingBar.current = true; return;
             }
             isScrubbing.current = true;
@@ -299,7 +303,9 @@ export default function PianoCanvas({
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        ctx.font = 'bold 15px Palatino Linotype, Palatino, serif';
+        const targetSize = isSeekingBar.current ? 75 : 15;
+        fontSizeRef.current += (targetSize - fontSizeRef.current) * 0.15;
+        ctx.font = `bold ${Math.round(fontSizeRef.current)}px Palatino Linotype, Palatino, serif`;
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.textAlign = 'right';
         ctx.fillText(formatTime(t), cw - 16, ch - KEY_H - 12);
