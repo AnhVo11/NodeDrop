@@ -13,7 +13,7 @@ const styles = {
   },
   controls: { display: 'flex', alignItems: 'center', gap: 10 },
   tempoWrap: { display: 'flex', alignItems: 'center', gap: 6 },
-  tempoLbl: {
+  lbl: {
     color: 'rgba(201,168,76,0.6)', fontSize: 11,
     letterSpacing: 1, minWidth: 34, textAlign: 'right',
   },
@@ -46,9 +46,17 @@ const styles = {
     color: 'rgba(201,168,76,0.35)', fontSize: 10, letterSpacing: 3,
     textAlign: 'center', pointerEvents: 'none', whiteSpace: 'nowrap',
   },
+  divider: {
+    width: 1, height: 20, background: 'rgba(201,168,76,0.2)', margin: '0 2px',
+  },
 };
 
-export default function TopBar({ isPlaying, onPlayPause, onRestart, onMidiLoad, tempo, onTempoChange, songTitle }) {
+export default function TopBar({
+  isPlaying, onPlayPause, onRestart, onMidiLoad,
+  tempo, onTempoChange,
+  zoom, onZoomChange,
+  songTitle,
+}) {
   return (
     <>
       <div style={styles.bar}>
@@ -57,13 +65,27 @@ export default function TopBar({ isPlaying, onPlayPause, onRestart, onMidiLoad, 
 
           {/* Tempo */}
           <div style={styles.tempoWrap}>
-            <span style={styles.tempoLbl}>{tempo}%</span>
+            <span style={styles.lbl}>{tempo}%</span>
             <input
               type="range" min="25" max="200" value={tempo}
               onChange={e => onTempoChange(parseInt(e.target.value))}
               style={{ width: 72, height: 2, accentColor: '#c9a84c' }}
             />
           </div>
+
+          <div style={styles.divider} />
+
+          {/* Zoom */}
+          <div style={styles.tempoWrap}>
+            <span style={styles.lbl}>🔍</span>
+            <input
+              type="range" min="100" max="400" value={zoom}
+              onChange={e => onZoomChange(parseInt(e.target.value))}
+              style={{ width: 72, height: 2, accentColor: '#c9a84c' }}
+            />
+          </div>
+
+          <div style={styles.divider} />
 
           {/* Restart */}
           <button style={styles.btn} onClick={onRestart}>↺</button>
@@ -82,8 +104,6 @@ export default function TopBar({ isPlaying, onPlayPause, onRestart, onMidiLoad, 
           />
         </div>
       </div>
-
-      {/* Song title */}
       <div style={styles.songTitle}>{songTitle}</div>
     </>
   );

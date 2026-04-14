@@ -1,69 +1,73 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
+import * as Tone from 'tone';
 
 export function useAudio() {
-  const aCtxRef = useRef(null);
+  const samplerRef = useRef(null);
+  const loadedRef  = useRef(false);
+
+  useEffect(() => {
+    // Salamander Grand Piano — real recorded samples
+    samplerRef.current = new Tone.Sampler({
+      urls: {
+        A0:  'A0.mp3',  C1:  'C1.mp3',
+        'D#1': 'Ds1.mp3', 'F#1': 'Fs1.mp3',
+        A1:  'A1.mp3',  C2:  'C2.mp3',
+        'D#2': 'Ds2.mp3', 'F#2': 'Fs2.mp3',
+        A2:  'A2.mp3',  C3:  'C3.mp3',
+        'D#3': 'Ds3.mp3', 'F#3': 'Fs3.mp3',
+        A3:  'A3.mp3',  C4:  'C4.mp3',
+        'D#4': 'Ds4.mp3', 'F#4': 'Fs4.mp3',
+        A4:  'A4.mp3',  C5:  'C5.mp3',
+        'D#5': 'Ds5.mp3', 'F#5': 'Fs5.mp3',
+        A5:  'A5.mp3',  C6:  'C6.mp3',
+        'D#6': 'Ds6.mp3', 'F#6': 'Fs6.mp3',
+        A6:  'A6.mp3',  C7:  'C7.mp3',
+        'D#7': 'Ds7.mp3', 'F#7': 'Fs7.mp3',
+        A7:  'A7.mp3',  C8:  'C8.mp3',
+      },
+      baseUrl: 'https://tonejs.github.io/audio/salamander/',
+      onload: () => { loadedRef.current = true; },
+    }).toDestination();
+
+    return () => { samplerRef.current?.dispose(); };
+  }, []);
 
   function initAudio() {
-    if (!aCtxRef.current) {
-      aCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    if (aCtxRef.current.state === 'suspended') aCtxRef.current.resume();
+    Tone.start();
+  }
+
+  function midiToNote(midi) {
+    const notes = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const octave = Math.floor(midi / 12) - 1;
+    return notes[midi % 12] + octave;
   }
 
   function playNote(midiNote, vel = 0.65, dur = 0.5) {
-    const aCtx = aCtxRef.current;
-    if (!aCtx) return;
-
-    const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
-    const now  = aCtx.currentTime;
-    const env  = aCtx.createGain();
-    env.connect(aCtx.destination);
-    env.gain.setValueAtTime(0, now);
-    env.gain.linearRampToValueAtTime(vel * 0.45, now + 0.003);
-    env.gain.exponentialRampToValueAtTime(vel * 0.28, now + 0.12);
-    env.gain.exponentialRampToValueAtTime(0.0001, now + Math.min(dur + 1.8, 5));
-
-    [[1,1,'triangle'],[2,0.5,'sine'],[3,0.22,'sine'],[4,0.10,'sine'],[6,0.05,'sine']]
-      .forEach(([h, a, t]) => {
-        const osc = aCtx.createOscillator();
-        const g   = aCtx.createGain();
-        osc.type = t;
-        osc.frequency.value = freq * h;
-        g.gain.value = a;
-        osc.connect(g);
-        g.connect(env);
-        osc.start(now);
-        osc.stop(now + Math.min(dur + 2.5, 6));
-      });
+    if (!loadedRef.current || !samplerRef.current) return;
+    Tone.start();
+    samplerRef.current.triggerAttackRelease(
+      midiToNote(midiNote),
+      Math.max(dur, 0.1),
+      Tone.now(),
+      vel,
+    );
   }
 
   function scheduleNote(midiNote, vel, dur, fireAt) {
-    const aCtx = aCtxRef.current;
-    if (!aCtx) return;
-
-    const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
-    const env  = aCtx.createGain();
-    env.connect(aCtx.destination);
-    env.gain.setValueAtTime(0, fireAt);
-    env.gain.linearRampToValueAtTime(vel * 0.4, fireAt + 0.003);
-    env.gain.exponentialRampToValueAtTime(vel * 0.25, fireAt + 0.12);
-    env.gain.exponentialRampToValueAtTime(0.0001, fireAt + Math.min(dur + 1.8, 5));
-
-    [[1,1,'triangle'],[2,0.5,'sine'],[3,0.22,'sine'],[4,0.10,'sine']]
-      .forEach(([h, a, t]) => {
-        const osc = aCtx.createOscillator();
-        const g   = aCtx.createGain();
-        osc.type = t;
-        osc.frequency.value = freq * h;
-        g.gain.value = a;
-        osc.connect(g);
-        g.connect(env);
-        osc.start(fireAt);
-        osc.stop(fireAt + Math.min(dur + 2.5, 6));
-      });
+    if (!loadedRef.current || !samplerRef.current) return;
+    const now = Tone.getContext().currentTime;
+    const delay = fireAt - now;
+    samplerRef.current.triggerAttackRelease(
+      midiToNote(midiNote),
+      Math.max(dur, 0.1),
+      Tone.now() + Math.max(0, delay),
+      vel,
+    );
   }
 
-  function getCtx() { return aCtxRef.current; }
+  function getCtx() {
+    return Tone.getContext().rawContext;
+  }
 
   return { initAudio, playNote, scheduleNote, getCtx };
 }

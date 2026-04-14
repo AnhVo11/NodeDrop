@@ -9,162 +9,165 @@ const MIN_NOTE = 36;
 const MAX_NOTE = 96;
 
 export default function App() {
-    const { initAudio, playNote, scheduleNote, getCtx } = useAudio();
+  const { initAudio, playNote, scheduleNote, getCtx } = useAudio();
 
-    const [song, setSong] = useState(() => buildFurElise());
-    const [noteObjs, setNoteObjs] = useState(() => buildFurElise().map(n => ({ ...n, sliced: false })));
-    const [songTitle, setSongTitle] = useState('Für Elise — Beethoven');
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [playOffset, setPlayOffset] = useState(0);
-    const [playStart, setPlayStart] = useState(0);
-    const [tempoScale, setTempoScale] = useState(1.0);
-    const [tempo, setTempo] = useState(100);
-    const [scheduled, setScheduled] = useState(new Set());
-    const [activeKeys, setActiveKeys] = useState(new Map());
+  const [song,       setSong]       = useState(() => buildFurElise());
+  const [noteObjs,   setNoteObjs]   = useState(() => buildFurElise().map(n => ({...n, sliced:false})));
+  const [songTitle,  setSongTitle]  = useState('Für Elise — Beethoven');
+  const [isPlaying,  setIsPlaying]  = useState(false);
+  const [playOffset, setPlayOffset] = useState(0);
+  const [playStart,  setPlayStart]  = useState(0);
+  const [tempoScale, setTempoScale] = useState(1.0);
+  const [tempo,      setTempo]      = useState(100);
+  const [zoom,       setZoom]       = useState(100); // 100 = all keys visible
+  const [scheduled,  setScheduled]  = useState(new Set());
+  const [activeKeys, setActiveKeys] = useState(new Map());
 
-    const stateRef = useRef({});
-    stateRef.current = { isPlaying, playOffset, playStart, tempoScale };
+  const stateRef = useRef({});
+  stateRef.current = { isPlaying, playOffset, playStart, tempoScale };
 
-    const getCurrentTime = useCallback(() => {
-        const { isPlaying, playOffset, playStart, tempoScale } = stateRef.current;
-        const aCtx = getCtx();
-        if (!isPlaying || !aCtx) return playOffset;
-        return playOffset + (aCtx.currentTime - playStart) * tempoScale;
-    }, [getCtx]);
+  const getCurrentTime = useCallback(() => {
+    const { isPlaying, playOffset, playStart, tempoScale } = stateRef.current;
+    const aCtx = getCtx();
+    if (!isPlaying || !aCtx) return playOffset;
+    return playOffset + (aCtx.currentTime - playStart) * tempoScale;
+  }, [getCtx]);
 
-    const handlePlayPause = useCallback(() => {
+  const handlePlayPause = useCallback(() => {
+    initAudio();
+    const aCtx = getCtx();
+    if (!aCtx) return;
+    if (!isPlaying) {
+      const last = song[song.length - 1];
+      if (last && playOffset >= last.startTime + last.duration + 0.5) {
+        setNoteObjs(song.map(n => ({...n, sliced:false})));
+        setScheduled(new Set());
+        setPlayOffset(0);
+      }
+      setPlayStart(aCtx.currentTime);
+      setIsPlaying(true);
+    } else {
+      setPlayOffset(getCurrentTime());
+      setScheduled(new Set());
+      setIsPlaying(false);
+    }
+  }, [isPlaying, playOffset, song, initAudio, getCtx, getCurrentTime]);
+
+  const handleRestart = useCallback(() => {
+    setIsPlaying(false);
+    setPlayOffset(0);
+    setPlayStart(0);
+    setScheduled(new Set());
+    setActiveKeys(new Map());
+    setNoteObjs(song.map(n => ({...n, sliced:false})));
+  }, [song]);
+
+  const handleSongEnd = useCallback(() => {
+    setIsPlaying(false);
+    setPlayOffset(0);
+    setScheduled(new Set());
+    setNoteObjs(song.map(n => ({...n, sliced:false})));
+  }, [song]);
+
+  const handleTempoChange = useCallback(val => {
+    const aCtx = getCtx();
+    if (isPlaying && aCtx) {
+      setPlayOffset(getCurrentTime());
+      setPlayStart(aCtx.currentTime);
+      setScheduled(new Set());
+    }
+    setTempo(val);
+    setTempoScale(val / 100);
+  }, [isPlaying, getCtx, getCurrentTime]);
+
+  const handleZoomChange = useCallback(val => {
+    setZoom(val);
+  }, []);
+
+  const handleScrub = useCallback((newTime) => {
+    const aCtx = getCtx();
+    setPlayOffset(newTime);
+    setScheduled(new Set());
+    if (isPlaying && aCtx) setPlayStart(aCtx.currentTime);
+
+    const newActive = new Map();
+    song.forEach(n => {
+      if (n.startTime <= newTime && n.startTime + n.duration >= newTime) {
         initAudio();
-        const aCtx = getCtx();
-        if (!aCtx) return;
+        playNote(n.note, n.vel * 0.6, Math.min(n.duration, 0.3));
+        const ac = getCtx();
+        if (ac) newActive.set(n.note, ac.currentTime + 0.35);
+      }
+    });
+    if (newActive.size > 0) setActiveKeys(newActive);
+  }, [isPlaying, getCtx, song, initAudio, playNote, setActiveKeys]);
 
-        if (!isPlaying) {
-            const last = song[song.length - 1];
-            if (last && playOffset >= last.startTime + last.duration + 0.5) {
-                setNoteObjs(song.map(n => ({ ...n, sliced: false })));
-                setScheduled(new Set());
-                setPlayOffset(0);
-            }
-            setPlayStart(aCtx.currentTime);
-            setIsPlaying(true);
-        } else {
-            setPlayOffset(getCurrentTime());
-            setScheduled(new Set());
-            setIsPlaying(false);
-        }
-    }, [isPlaying, playOffset, song, initAudio, getCtx, getCurrentTime]);
-
-    const handleRestart = useCallback(() => {
+  const handleMidiLoad = useCallback(e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const notes = parseMidi(ev.target.result)
+          .filter(n => n.note >= MIN_NOTE && n.note <= MAX_NOTE);
+        if (!notes.length) { alert('No notes found in playable range (C2–C7).'); return; }
+        const title = f.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+        setSong(notes);
+        setNoteObjs(notes.map(n => ({...n, sliced:false})));
+        setSongTitle(title);
         setIsPlaying(false);
         setPlayOffset(0);
         setPlayStart(0);
         setScheduled(new Set());
         setActiveKeys(new Map());
-        setNoteObjs(song.map(n => ({ ...n, sliced: false })));
-    }, [song]);
+      } catch(err) { alert('Could not parse MIDI: ' + err.message); }
+    };
+    reader.readAsArrayBuffer(f);
+    e.target.value = '';
+  }, []);
 
-    const handleSongEnd = useCallback(() => {
-        setIsPlaying(false);
-        setPlayOffset(0);
-        setScheduled(new Set());
-        setNoteObjs(song.map(n => ({ ...n, sliced: false })));
-    }, [song]);
-
-    const handleScrub = useCallback((newTime) => {
-        const aCtx = getCtx();
-        setPlayOffset(newTime);
-        setScheduled(new Set());
-        if (isPlaying && aCtx) {
-            setPlayStart(aCtx.currentTime);
-        }
-
-        // Highlight keys + play notes at scrub position
-        const newActive = new Map();
-        song.forEach(n => {
-            if (n.startTime <= newTime && n.startTime + n.duration >= newTime) {
-                initAudio();
-                playNote(n.note, n.vel * 0.6, Math.min(n.duration, 0.3));
-                const ac = getCtx();
-                if (ac) newActive.set(n.note, ac.currentTime + 0.35);
-            }
-        });
-        if (newActive.size > 0) setActiveKeys(newActive);
-
-    }, [isPlaying, getCtx, song, initAudio, playNote, setActiveKeys]);
-
-    const handleTempoChange = useCallback(val => {
-        const aCtx = getCtx();
-        if (isPlaying && aCtx) {
-            setPlayOffset(getCurrentTime());
-            setPlayStart(aCtx.currentTime);
-            setScheduled(new Set());
-        }
-        setTempo(val);
-        setTempoScale(val / 100);
-    }, [isPlaying, getCtx, getCurrentTime]);
-
-    const handleMidiLoad = useCallback(e => {
-        const f = e.target.files[0];
-        if (!f) return;
-        const reader = new FileReader();
-        reader.onload = ev => {
-            try {
-                const notes = parseMidi(ev.target.result)
-                    .filter(n => n.note >= MIN_NOTE && n.note <= MAX_NOTE);
-                if (!notes.length) { alert('No notes found in playable range (C2–C7).'); return; }
-                const title = f.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-                setSong(notes);
-                setNoteObjs(notes.map(n => ({ ...n, sliced: false })));
-                setSongTitle(title);
-                setIsPlaying(false);
-                setPlayOffset(0);
-                setPlayStart(0);
-                setScheduled(new Set());
-                setActiveKeys(new Map());
-            } catch (err) { alert('Could not parse MIDI: ' + err.message); }
-        };
-        reader.readAsArrayBuffer(f);
-        e.target.value = '';
-    }, []);
-
-    return (
-        <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#07070c' }}>
-            <PianoCanvas
-                noteObjs={noteObjs}
-                setNoteObjs={setNoteObjs}
-                isPlaying={isPlaying}
-                playOffset={playOffset}
-                playStart={playStart}
-                tempoScale={tempoScale}
-                scheduled={scheduled}
-                setScheduled={setScheduled}
-                activeKeys={activeKeys}
-                setActiveKeys={setActiveKeys}
-                scheduleNote={scheduleNote}
-                playNote={playNote}
-                getCtx={getCtx}
-                onSongEnd={handleSongEnd}
-                onScrub={handleScrub}
-            />
-            <TopBar
-                isPlaying={isPlaying}
-                onPlayPause={handlePlayPause}
-                onRestart={handleRestart}
-                onMidiLoad={handleMidiLoad}
-                tempo={tempo}
-                onTempoChange={handleTempoChange}
-                songTitle={songTitle.toUpperCase()}
-            />
-            {!isPlaying && (
-                <div style={{
-                    position: 'fixed', top: '50%', left: '50%',
-                    transform: 'translate(-50%,-50%)',
-                    color: 'rgba(201,168,76,0.15)', fontSize: 12,
-                    letterSpacing: 5, textTransform: 'uppercase',
-                    pointerEvents: 'none',
-                }}>
-                    PAUSED · SWIPE TO SLICE
-                </div>
-            )}
+  return (
+    <div style={{ width:'100vw', height:'100vh', overflow:'hidden', background:'#07070c' }}>
+      <PianoCanvas
+        noteObjs={noteObjs}
+        setNoteObjs={setNoteObjs}
+        isPlaying={isPlaying}
+        playOffset={playOffset}
+        playStart={playStart}
+        tempoScale={tempoScale}
+        scheduled={scheduled}
+        setScheduled={setScheduled}
+        activeKeys={activeKeys}
+        setActiveKeys={setActiveKeys}
+        scheduleNote={scheduleNote}
+        playNote={playNote}
+        getCtx={getCtx}
+        onSongEnd={handleSongEnd}
+        onScrub={handleScrub}
+        zoom={zoom}
+      />
+      <TopBar
+        isPlaying={isPlaying}
+        onPlayPause={handlePlayPause}
+        onRestart={handleRestart}
+        onMidiLoad={handleMidiLoad}
+        tempo={tempo}
+        onTempoChange={handleTempoChange}
+        zoom={zoom}
+        onZoomChange={handleZoomChange}
+        songTitle={songTitle.toUpperCase()}
+      />
+      {!isPlaying && (
+        <div style={{
+          position:'fixed', top:'50%', left:'50%',
+          transform:'translate(-50%,-50%)',
+          color:'rgba(201,168,76,0.15)', fontSize:12,
+          letterSpacing:5, textTransform:'uppercase',
+          pointerEvents:'none',
+        }}>
+          SCROLL UP · DOWN TO NAVIGATE
         </div>
-    );
+      )}
+    </div>
+  );
 }
