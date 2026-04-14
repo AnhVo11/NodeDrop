@@ -22,11 +22,14 @@ export default function App() {
     const [zoom, setZoom] = useState(100);
     const [fullPedal, setFullPedal] = useState(false);
     const [isPedalOn, setIsPedalOn] = useState(false);
+    const [rightColor, setRightColor] = useState('#4a9eff');
+    const [leftColor, setLeftColor] = useState('#c9a84c');
     const [scheduled, setScheduled] = useState(new Set());
     const [activeKeys, setActiveKeys] = useState(new Map());
 
     const stateRef = useRef({});
     stateRef.current = { isPlaying, playOffset, playStart, tempoScale };
+
     const scrubPlayedRef = useRef(new Set());
 
     const getCurrentTime = useCallback(() => {
@@ -37,14 +40,10 @@ export default function App() {
     }, [getCtx]);
 
     const hasPedal = useMemo(() => song.some(n => n.isPedal), [song]);
-    useEffect(() => {
-        setPedal(isPedalOn);
-    }, [isPedalOn, setPedal]);
 
     useEffect(() => {
         if (fullPedal) { setIsPedalOn(true); return; }
         if (!hasPedal) { setIsPedalOn(false); return; }
-
         const interval = setInterval(() => {
             const t = getCurrentTime();
             let on = false;
@@ -55,9 +54,12 @@ export default function App() {
             }
             setIsPedalOn(on);
         }, 50);
-
         return () => clearInterval(interval);
     }, [fullPedal, hasPedal, song, getCurrentTime]);
+
+    useEffect(() => {
+        setPedal(isPedalOn);
+    }, [isPedalOn, setPedal]);
 
     const handlePlayPause = useCallback(() => {
         initAudio();
@@ -117,27 +119,22 @@ export default function App() {
         if (isPlaying && aCtx) setPlayStart(aCtx.currentTime);
 
         const newActive = new Map();
-
         song.forEach(n => {
             if (n.isPedal) return;
             if (n.note < MIN_NOTE || n.note > MAX_NOTE) return;
             const isHit = n.startTime <= newTime && n.startTime + n.duration >= newTime;
+            const key = n.startTime + '_' + n.note;
             if (!isHit) {
-                // Note no longer under cursor — remove from played set so it can play again next time
-                scrubPlayedRef.current.delete(n.startTime + '_' + n.note);
+                scrubPlayedRef.current.delete(key);
                 return;
             }
-            // Already played this note during this scrub pass — skip
-            const key = n.startTime + '_' + n.note;
             if (scrubPlayedRef.current.has(key)) return;
-
             scrubPlayedRef.current.add(key);
             initAudio();
             playNote(n.note, n.vel * 0.6, Math.min(n.duration, 0.3));
             const ac = getCtx();
-            if (ac) newActive.set(n.note, ac.currentTime + 0.35);
+            if (ac) newActive.set(n.note, { start: 0, end: ac.currentTime + Math.max(n.duration, 0.5), hand: n.hand });
         });
-
         if (newActive.size > 0) setActiveKeys(newActive);
     }, [isPlaying, getCtx, song, initAudio, playNote, setActiveKeys]);
 
@@ -168,6 +165,14 @@ export default function App() {
         e.target.value = '';
     }, []);
 
+    // Song duration for progress bar
+    const songDuration = useMemo(() => {
+        const notes = song.filter(n => !n.isPedal);
+        if (!notes.length) return 1;
+        const last = notes[notes.length - 1];
+        return last.startTime + last.duration;
+    }, [song]);
+
     return (
         <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#07070c' }}>
             <PianoCanvas
@@ -189,6 +194,9 @@ export default function App() {
                 zoom={zoom}
                 isPedalOn={isPedalOn}
                 hasPedal={hasPedal}
+                rightColor={rightColor}
+                leftColor={leftColor}
+                songDuration={songDuration}
             />
             <TopBar
                 isPlaying={isPlaying}
@@ -201,6 +209,10 @@ export default function App() {
                 onZoomChange={handleZoomChange}
                 fullPedal={fullPedal}
                 onToggleFullPedal={() => setFullPedal(f => !f)}
+                rightColor={rightColor}
+                onRightColorChange={setRightColor}
+                leftColor={leftColor}
+                onLeftColorChange={setLeftColor}
                 songTitle={songTitle.toUpperCase()}
             />
             {!isPlaying && (

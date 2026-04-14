@@ -1,4 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
+
+const COLORS = [
+  '#4a9eff', '#c9a84c', '#4aff91', '#ff4a4a',
+  '#b44aff', '#ff4adb', '#ffffff', '#ff944a',
+];
 
 const styles = {
   bar: {
@@ -15,7 +20,7 @@ const styles = {
   sliderWrap: { display: 'flex', alignItems: 'center', gap: 6 },
   lbl: {
     color: 'rgba(201,168,76,0.6)', fontSize: 11,
-    letterSpacing: 1, minWidth: 34, textAlign: 'right',
+    letterSpacing: 1, textAlign: 'right',
   },
   val: {
     color: 'rgba(201,168,76,0.9)', fontSize: 11,
@@ -37,6 +42,14 @@ const styles = {
     width: 44, height: 44, fontSize: 16,
     WebkitTapHighlightColor: 'transparent',
   },
+  textBtn: {
+    background: 'transparent',
+    border: '1px solid rgba(201,168,76,0.35)',
+    color: 'rgba(201,168,76,0.65)', padding: '0 10px', borderRadius: 4,
+    cursor: 'pointer', fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase',
+    fontFamily: 'inherit', WebkitTapHighlightColor: 'transparent',
+    height: 30, display: 'flex', alignItems: 'center', gap: 6,
+  },
   loadBtn: {
     background: 'transparent',
     border: '1px solid rgba(201,168,76,0.35)',
@@ -53,16 +66,60 @@ const styles = {
   divider: {
     width: 1, height: 20, background: 'rgba(201,168,76,0.2)', margin: '0 2px',
   },
+  dropdown: {
+    position: 'absolute', top: 44, left: 0,
+    background: '#12121c', border: '1px solid rgba(201,168,76,0.3)',
+    borderRadius: 8, padding: 10, zIndex: 100,
+    display: 'flex', flexWrap: 'wrap', gap: 8, width: 140,
+  },
+  swatch: {
+    width: 22, height: 22, borderRadius: '50%', cursor: 'pointer',
+  },
 };
+
+function ColorButton({ label, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        style={styles.textBtn}
+        onClick={() => setOpen(o => !o)}
+      >
+        <div style={{
+          width: 12, height: 12, borderRadius: '50%',
+          background: value, flexShrink: 0,
+        }} />
+        {label}
+      </button>
+      {open && (
+        <div style={styles.dropdown}>
+          {COLORS.map(c => (
+            <div
+              key={c}
+              style={{
+                ...styles.swatch,
+                background: c,
+                border: value === c ? '2px solid white' : '2px solid rgba(255,255,255,0.15)',
+                transform: value === c ? 'scale(1.2)' : 'scale(1)',
+              }}
+              onClick={() => { onChange(c); setOpen(false); }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function TopBar({
   isPlaying, onPlayPause, onRestart, onMidiLoad,
   tempo, onTempoChange,
   zoom, onZoomChange,
   fullPedal, onToggleFullPedal,
+  rightColor, onRightColorChange,
+  leftColor, onLeftColorChange,
   songTitle,
 }) {
-  // Convert tempo % to speed multiplier display e.g. 100% -> 1.0
   const speedDisplay = (tempo / 100).toFixed(1);
 
   return (
@@ -97,15 +154,21 @@ export default function TopBar({
 
           <div style={styles.divider} />
 
+          {/* Right hand color */}
+          <ColorButton label="RIGHT" value={rightColor} onChange={onRightColorChange} />
+
+          {/* Left hand color */}
+          <ColorButton label="LEFT" value={leftColor} onChange={onLeftColorChange} />
+
+          <div style={styles.divider} />
+
           {/* Full Sustain */}
           <button
             style={{
-              ...styles.btn,
+              ...styles.textBtn,
               background: fullPedal ? 'rgba(220,50,50,0.25)' : 'transparent',
               border: fullPedal ? '1px solid rgba(220,50,50,0.7)' : '1px solid rgba(201,168,76,0.35)',
               color: fullPedal ? '#ff6666' : 'rgba(201,168,76,0.5)',
-              fontSize: 9, letterSpacing: 1, borderRadius: 4,
-              width: 'auto', padding: '0 8px',
             }}
             onClick={onToggleFullPedal}
           >
@@ -129,6 +192,7 @@ export default function TopBar({
             style={styles.fileInput}
             onChange={onMidiLoad}
           />
+
         </div>
       </div>
       <div style={styles.songTitle}>{songTitle}</div>
