@@ -27,6 +27,7 @@ export default function App() {
     const [scheduled, setScheduled] = useState(new Set());
     const [activeKeys, setActiveKeys] = useState(new Map());
     const [editMode, setEditMode] = useState(false);
+    const [loop, setLoop] = useState(false);
 
     const stateRef = useRef({});
     stateRef.current = { isPlaying, playOffset, playStart, tempoScale };
@@ -130,11 +131,19 @@ export default function App() {
     }, [song]);
 
     const handleSongEnd = useCallback(() => {
-        setIsPlaying(false);
-        setPlayOffset(0);
-        setScheduled(new Set());
-        setNoteObjs(song.map(n => ({ ...n, sliced: false })));
-    }, [song]);
+        if (loop) {
+            setPlayOffset(0);
+            setScheduled(new Set());
+            setNoteObjs(song.map(n => ({ ...n, sliced: false })));
+            const aCtx = getCtx();
+            if (aCtx) setPlayStart(aCtx.currentTime);
+        } else {
+            setIsPlaying(false);
+            setPlayOffset(0);
+            setScheduled(new Set());
+            setNoteObjs(song.map(n => ({ ...n, sliced: false })));
+        }
+    }, [song, loop, getCtx]);
 
     const handleTempoChange = useCallback(val => {
         const aCtx = getCtx();
@@ -253,6 +262,8 @@ export default function App() {
                 onScrub={handleScrub}
                 zoom={zoom}
                 isPedalOn={isPedalOn}
+                fullPedal={fullPedal}
+                onToggleFullPedal={() => setFullPedal(f => !f)}
                 rightColor={rightColor}
                 leftColor={leftColor}
                 songDuration={songDuration}
@@ -279,6 +290,8 @@ export default function App() {
                 onLeftColorChange={setLeftColor}
                 onEnterEdit={handleEnterEdit}
                 songTitle={songTitle.toUpperCase()}
+                loop={loop}
+                onToggleLoop={() => setLoop(l => !l)}
             />
             {!isPlaying && !editMode && (
                 <div style={{

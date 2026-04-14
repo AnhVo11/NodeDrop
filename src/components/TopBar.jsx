@@ -5,6 +5,7 @@ const styles = {
         position: 'fixed', top: 0, left: 0, right: 0, height: 56,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 16px', zIndex: 20,
+        position: 'fixed',
         background: 'linear-gradient(180deg, rgba(7,7,12,0.97) 0%, transparent 100%)',
     },
     brand: {
@@ -40,14 +41,22 @@ const styles = {
         height: 30, display: 'flex', alignItems: 'center', gap: 6,
     },
     divider: { width: 1, height: 20, background: 'rgba(201,168,76,0.2)', margin: '0 2px' },
+    center: {
+        position: 'fixed', left: '50%', top: '0px',
+        height: '56px',
+        transform: 'translateX(-50%)',
+        display: 'flex', alignItems: 'center', gap: 10,
+        zIndex: 21,
+    },
     songTitle: {
-        position: 'fixed', top: 64, left: 16,
+        position: 'fixed', top: 76, left: 16,
         color: 'rgba(255,255,255,0.85)', fontSize: 13, letterSpacing: 3,
         textAlign: 'left', pointerEvents: 'none', whiteSpace: 'nowrap',
     },
     fileInput: { display: 'none' },
     // Gear dropdown
     gearWrap: { position: 'relative' },
+    handWrap: { position: 'relative' },
     dropdown: {
         position: 'absolute', top: 44, right: 0,
         background: '#12121c', border: '1px solid rgba(201,168,76,0.25)',
@@ -100,6 +109,56 @@ function ColorButton({ label, value, onChange }) {
     );
 }
 
+function HandColorButton({ rightColor, onRightColorChange, leftColor, onLeftColorChange }) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef(null);
+    useEffect(() => {
+        const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener('pointerdown', handler);
+        return () => document.removeEventListener('pointerdown', handler);
+    }, []);
+    return (
+        <div style={styles.handWrap} ref={ref}>
+            <button style={styles.btn} onClick={() => setOpen(o => !o)} title="Hand Colors">🖐</button>
+            {open && (
+                <div style={{
+                    position: 'absolute', top: 44, right: 0,
+                    background: '#12121c', border: '1px solid rgba(201,168,76,0.25)',
+                    borderRadius: 8, padding: '12px 14px', zIndex: 100,
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.6)', minWidth: 140,
+                    display: 'flex', flexDirection: 'column', gap: 12,
+                }}>
+                    <div>
+                        <div style={{ color: 'rgba(201,168,76,0.6)', fontSize: 10, letterSpacing: 2, marginBottom: 6 }}>RIGHT HAND</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                            {COLORS.map(c => (
+                                <div key={c} onClick={() => onRightColorChange(c)} style={{
+                                    width: 20, height: 20, borderRadius: '50%', cursor: 'pointer', background: c,
+                                    border: rightColor === c ? '2px solid white' : '2px solid rgba(255,255,255,0.15)',
+                                    transform: rightColor === c ? 'scale(1.2)' : 'scale(1)',
+                                }} />
+                            ))}
+                        </div>
+                    </div>
+                    <div style={{ height: 1, background: 'rgba(201,168,76,0.1)' }} />
+                    <div>
+                        <div style={{ color: 'rgba(201,168,76,0.6)', fontSize: 10, letterSpacing: 2, marginBottom: 6 }}>LEFT HAND</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                            {COLORS.map(c => (
+                                <div key={c} onClick={() => onLeftColorChange(c)} style={{
+                                    width: 20, height: 20, borderRadius: '50%', cursor: 'pointer', background: c,
+                                    border: leftColor === c ? '2px solid white' : '2px solid rgba(255,255,255,0.15)',
+                                    transform: leftColor === c ? 'scale(1.2)' : 'scale(1)',
+                                }} />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function TopBar({
     isPlaying, onPlayPause, onRestart, onMidiLoad, onLoadSong,
     tempo, onTempoChange, zoom, onZoomChange,
@@ -108,6 +167,7 @@ export default function TopBar({
     leftColor, onLeftColorChange,
     onEnterEdit,
     songTitle,
+    loop, onToggleLoop,
 }) {
     const [gearOpen, setGearOpen] = useState(false);
     const gearRef = useRef(null);
@@ -128,6 +188,25 @@ export default function TopBar({
         <>
             <div style={styles.bar}>
                 <div style={styles.brand}>NoteDrop</div>
+
+                {/* Center — go to start + play/pause + loop */}
+                <div style={styles.center}>
+                    <button style={styles.btn} onClick={onRestart} title="Go to beginning">⏮</button>
+                    <button style={styles.btnLarge} onClick={onPlayPause}>
+                        {isPlaying ? '■' : '▶'}
+                    </button>
+                    <button
+                        style={{
+                            ...styles.btn,
+                            background: loop ? 'rgba(201,168,76,0.2)' : 'transparent',
+                            border: loop ? '1px solid rgba(201,168,76,0.8)' : '1px solid rgba(201,168,76,0.35)',
+                            color: loop ? '#c9a84c' : 'rgba(201,168,76,0.45)',
+                        }}
+                        onClick={onToggleLoop}
+                        title="Loop"
+                    >⟳</button>
+                </div>
+
                 <div style={styles.controls}>
 
                     {/* Speed */}
@@ -152,34 +231,11 @@ export default function TopBar({
 
                     <div style={styles.divider} />
 
-                    {/* Colors */}
-                    <ColorButton label="LEFT" value={leftColor} onChange={onLeftColorChange} />
-                    <ColorButton label="RIGHT" value={rightColor} onChange={onRightColorChange} />
-
-                    <div style={styles.divider} />
-
-                    {/* Full Sustain */}
-                    <button
-                        style={{
-                            ...styles.textBtn,
-                            background: fullPedal ? 'rgba(220,50,50,0.25)' : 'transparent',
-                            border: fullPedal ? '1px solid rgba(220,50,50,0.7)' : '1px solid rgba(201,168,76,0.35)',
-                            color: fullPedal ? '#ff6666' : 'rgba(201,168,76,0.5)',
-                        }}
-                        onClick={onToggleFullPedal}
-                    >
-                        FULL SUSTAIN
-                    </button>
-
-                    <div style={styles.divider} />
-
-                    {/* Restart */}
-                    <button style={styles.btn} onClick={onRestart}>↺</button>
-
-                    {/* Play/Pause */}
-                    <button style={styles.btnLarge} onClick={onPlayPause}>
-                        {isPlaying ? '■' : '▶'}
-                    </button>
+                    {/* Hand Colors */}
+                    <HandColorButton
+                        rightColor={rightColor} onRightColorChange={onRightColorChange}
+                        leftColor={leftColor} onLeftColorChange={onLeftColorChange}
+                    />
 
                     <div style={styles.divider} />
 

@@ -17,7 +17,7 @@ export default function PianoCanvas({
     activeKeys, setActiveKeys,
     scheduleNote, playNote, getCtx,
     onSongEnd, onScrub, zoom,
-    isPedalOn,
+    isPedalOn, fullPedal, onToggleFullPedal,
     rightColor, leftColor,
     songDuration,
     editMode, onExitEdit, onAddNote, onUpdateNotes,
@@ -74,8 +74,8 @@ export default function PianoCanvas({
             if (stateRef.current.editMode) return;
             if (e.touches) e.preventDefault();
             const { y } = getXY(e);
-            const barY = canvas.height - KEY_H - 6;
-            if (y >= barY - 16 && y <= barY + 22) {
+            const barY = BAR_H;
+            if (y >= barY - 4 && y <= barY + 14) {
                 isSeekingBar.current = true; return;
             }
             isScrubbing.current = true;
@@ -285,7 +285,7 @@ export default function PianoCanvas({
     const drawProgressAndTime = useCallback((ctx, cw, ch) => {
         const t = currentTime();
         const prog = Math.min(1, Math.max(0, t / songDuration));
-        const barY = ch - KEY_H - 6;
+        const barY = BAR_H;
 
         ctx.fillStyle = 'rgba(255,255,255,0.08)';
         ctx.beginPath(); ctx.roundRect(0, barY, cw, 6, 3); ctx.fill();
@@ -302,7 +302,7 @@ export default function PianoCanvas({
         ctx.font = 'bold 15px Palatino Linotype, Palatino, serif';
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.textAlign = 'right';
-        ctx.fillText(`${formatTime(t)} / ${formatTime(songDuration)}`, cw - 16, barY - 10);
+        ctx.fillText(formatTime(t), cw - 16, ch - KEY_H - 12);
         ctx.textAlign = 'left';
     }, [currentTime, songDuration]);
 
@@ -353,10 +353,18 @@ export default function PianoCanvas({
             <canvas ref={canvasRef} style={{ display: 'block', touchAction: 'none' }} />
 
             {/* Sustain indicator */}
-            <div style={{
-                position: 'absolute', bottom: KEY_H + 16, left: 16,
-                display: 'flex', alignItems: 'center', gap: 6, pointerEvents: 'none',
-            }}>
+            <div
+                onClick={onToggleFullPedal}
+                style={{
+                    position: 'absolute', bottom: KEY_H + 10, left: 10,
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    cursor: 'pointer',
+                    border: fullPedal ? '1px solid rgba(220,50,50,0.8)' : '1px solid transparent',
+                    borderRadius: 6, padding: '4px 8px',
+                    background: fullPedal ? 'rgba(220,50,50,0.1)' : 'transparent',
+                    transition: 'all 0.15s',
+                    WebkitTapHighlightColor: 'transparent',
+                }}>
                 <div style={{
                     width: 8, height: 8, borderRadius: '50%',
                     background: isPedalOn ? '#ff3333' : 'rgba(255,255,255,0.12)',
