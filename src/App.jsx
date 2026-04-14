@@ -27,6 +27,7 @@ export default function App() {
 
     const stateRef = useRef({});
     stateRef.current = { isPlaying, playOffset, playStart, tempoScale };
+    const scrubPlayedRef = useRef(new Set());
 
     const getCurrentTime = useCallback(() => {
         const { isPlaying, playOffset, playStart, tempoScale } = stateRef.current;
@@ -116,15 +117,27 @@ export default function App() {
         if (isPlaying && aCtx) setPlayStart(aCtx.currentTime);
 
         const newActive = new Map();
+
         song.forEach(n => {
             if (n.isPedal) return;
-            if (n.startTime <= newTime && n.startTime + n.duration >= newTime) {
-                initAudio();
-                playNote(n.note, n.vel * 0.6, Math.min(n.duration, 0.3));
-                const ac = getCtx();
-                if (ac) newActive.set(n.note, ac.currentTime + 0.35);
+            if (n.note < MIN_NOTE || n.note > MAX_NOTE) return;
+            const isHit = n.startTime <= newTime && n.startTime + n.duration >= newTime;
+            if (!isHit) {
+                // Note no longer under cursor — remove from played set so it can play again next time
+                scrubPlayedRef.current.delete(n.startTime + '_' + n.note);
+                return;
             }
+            // Already played this note during this scrub pass — skip
+            const key = n.startTime + '_' + n.note;
+            if (scrubPlayedRef.current.has(key)) return;
+
+            scrubPlayedRef.current.add(key);
+            initAudio();
+            playNote(n.note, n.vel * 0.6, Math.min(n.duration, 0.3));
+            const ac = getCtx();
+            if (ac) newActive.set(n.note, ac.currentTime + 0.35);
         });
+
         if (newActive.size > 0) setActiveKeys(newActive);
     }, [isPlaying, getCtx, song, initAudio, playNote, setActiveKeys]);
 
