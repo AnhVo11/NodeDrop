@@ -24,6 +24,8 @@ export default function EditOverlay({
     songDuration,
 }) {
     const [editTool, setEditTool] = useState(null);
+    const [paintHand, setPaintHand] = useState(null); // null=off, 0=right, 1=left
+    const paintHandRef = useRef(null);
     const editToolRef = useRef(null);
     const sustainTrailRef = useRef([]);
     const interactRef = useRef(null);
@@ -38,6 +40,7 @@ export default function EditOverlay({
     stateRef.current = { noteObjs, rightColor, leftColor };
 
     useEffect(() => { editToolRef.current = editTool; }, [editTool]);
+    useEffect(() => { paintHandRef.current = paintHand; }, [paintHand]);
 
     const { pushUndo, undo, redo } = useEditHistory(onUpdateNotes, stateRef);
 
@@ -263,6 +266,13 @@ export default function EditOverlay({
                 return;
             }
 
+            // ---- PAINT tool ----
+            if (tool === 'paint') {
+                pushUndo(stateRef.current.noteObjs);
+                interactRef.current = { type: 'paint', lastX: x, lastY: y };
+                return;
+            }
+
             // Block multiple interactions
             if (interactRef.current || pedalDrawRef.current) return;
 
@@ -354,6 +364,26 @@ export default function EditOverlay({
             // Delete swipe
             if (ia.type === 'deleteSwipe') {
                 checkDeleteSwipe(ia.lastX, ia.lastY, x, y, ch);
+                ia.lastX = x; ia.lastY = y;
+                sustainTrailRef.current.push({ x, y });
+                if (sustainTrailRef.current.length > 30) sustainTrailRef.current.shift();
+                return;
+            }
+
+            if (ia.type === 'paint') {
+                const { noteObjs } = stateRef.current;
+                let changed = false;
+                const updated = noteObjs.map(n => {
+                    if (n.isPedal || n.note < MIN_NOTE || n.note > MAX_NOTE) return n;
+                    const r = getNoteRect(n, ch);
+                    const x1 = Math.min(ia.lastX, x), x2 = Math.max(ia.lastX, x);
+                    const y1 = Math.min(ia.lastY, y), y2 = Math.max(ia.lastY, y);
+                    const hits = x2 >= r.x && x1 <= r.x + r.w && y2 >= r.y && y1 <= r.y + r.h;
+                    if (!hits || n.hand === paintHandRef.current) return n;
+                    changed = true;
+                    return { ...n, hand: paintHandRef.current };
+                });
+                if (changed) onUpdateNotes(updated);
                 ia.lastX = x; ia.lastY = y;
                 sustainTrailRef.current.push({ x, y });
                 if (sustainTrailRef.current.length > 30) sustainTrailRef.current.shift();
@@ -458,7 +488,7 @@ export default function EditOverlay({
             }
 
             // Clear delete trail
-            if (interactRef.current?.type === 'deleteSwipe') {
+            if (interactRef.current?.type === 'deleteSwipe' || interactRef.current?.type === 'paint') {
                 interactRef.current = null;
                 setTimeout(() => { sustainTrailRef.current = []; }, 300);
                 return;
@@ -679,8 +709,13 @@ export default function EditOverlay({
         function drawDeleteTrail() {
             const trail = sustainTrailRef.current;
             if (trail.length < 2) return;
+            const ia = interactRef.current;
+            const { rightColor, leftColor } = stateRef.current;
+            const trailColor = ia?.type === 'paint'
+                ? (paintHandRef.current === 0 ? rightColor : leftColor)
+                : 'rgba(255,60,60,0.85)';
             ctx.save();
-            ctx.strokeStyle = 'rgba(255,60,60,0.85)';
+            ctx.strokeStyle = trailColor;
             ctx.lineWidth = 3;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
@@ -787,7 +822,7 @@ export default function EditOverlay({
                 {/* Tools */}
                 {[
                     { key: 'remove', label: '- DELETE' },
-                    { key: 'pedal', label: '🎹 PEDAL' },
+                    { key: 'pedal', label: 'SUSTAIN' },
                 ].map(({ key, label }) => (
                     <button key={key} style={toolBtn(key)} onClick={() => toggleTool(key)}>
                         {label}
@@ -796,6 +831,42 @@ export default function EditOverlay({
 
                 <div style={{ width: 1, background: 'rgba(201,168,76,0.15)', flexShrink: 0, alignSelf: 'stretch' }} />
 
+                {/* L / R hand paint buttons */}
+                {[
+                    { hand: 1, label: 'L', color: leftColor },
+                    { hand: 0, label: 'R', color: rightColor },
+                ].map(({ hand, label, color }) => (
+                    <button
+                        key={hand}
+                        style={{
+                            width: 44, minWidth: 44, flexShrink: 0,
+                            background: editTool === 'paint' && paintHand === hand ? `${color}22` : 'transparent',
+                            border: editTool === 'paint' && paintHand === hand
+                                ? `1px solid ${color}`
+                                : '1px solid rgba(201,168,76,0.25)',
+                            color: editTool === 'paint' && paintHand === hand ? color : 'rgba(201,168,76,0.35)',
+                            padding: 0, borderRadius: 6, cursor: 'pointer',
+                            fontSize: 11, letterSpacing: 1.5,
+                            fontFamily: 'inherit', WebkitTapHighlightColor: 'transparent',
+                            alignSelf: 'stretch', display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', gap: 5,
+                        }}
+                        onClick={() => {
+                            if (editTool === 'paint' && paintHand === hand) {
+                                setEditTool(null); setPaintHand(null);
+                            } else {
+                                setEditTool('paint'); setPaintHand(hand);
+                            }
+                        }}
+                    >
+                        <div style={{
+                            width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0,
+                        }} />
+                        {label}
+                    </button>
+                ))}
+
+                <div style={{ width: 1, background: 'rgba(201,168,76,0.15)', flexShrink: 0, alignSelf: 'stretch' }} />
                 {/* Done */}
                 <button
                     style={{

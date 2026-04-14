@@ -109,7 +109,7 @@ function ColorButton({ label, value, onChange }) {
     );
 }
 
-function HandColorButton({ rightColor, onRightColorChange, leftColor, onLeftColorChange }) {
+function HandColorButton({ rightColor, onRightColorChange, leftColor, onLeftColorChange, hiddenHands, onToggleHideHand }) {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
     useEffect(() => {
@@ -119,38 +119,54 @@ function HandColorButton({ rightColor, onRightColorChange, leftColor, onLeftColo
     }, []);
     return (
         <div style={styles.handWrap} ref={ref}>
-            <button style={styles.btn} onClick={() => setOpen(o => !o)} title="Hand Colors">🖐</button>
+            <button style={styles.btn} onClick={() => setOpen(o => !o)} title="Hand Colors"><i className="bi bi-hand-index" /></button>
             {open && (
                 <div style={{
                     position: 'absolute', top: 44, right: 0,
                     background: '#12121c', border: '1px solid rgba(201,168,76,0.25)',
                     borderRadius: 8, padding: '12px 14px', zIndex: 100,
                     boxShadow: '0 8px 32px rgba(0,0,0,0.6)', minWidth: 140,
-                    display: 'flex', flexDirection: 'column', gap: 12,
+                    display: 'flex', flexDirection: 'row', gap: 16,
                 }}>
                     <div>
-                        <div style={{ color: 'rgba(201,168,76,0.6)', fontSize: 10, letterSpacing: 2, marginBottom: 6 }}>RIGHT HAND</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                        <div style={{ color: 'rgba(201,168,76,0.6)', fontSize: 10, letterSpacing: 2, marginBottom: 6, whiteSpace: 'nowrap' }}>LEFT HAND</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, width: 74 }}>
                             {COLORS.map(c => (
-                                <div key={c} onClick={() => onRightColorChange(c)} style={{
-                                    width: 20, height: 20, borderRadius: '50%', cursor: 'pointer', background: c,
-                                    border: rightColor === c ? '2px solid white' : '2px solid rgba(255,255,255,0.15)',
-                                    transform: rightColor === c ? 'scale(1.2)' : 'scale(1)',
-                                }} />
-                            ))}
-                        </div>
-                    </div>
-                    <div style={{ height: 1, background: 'rgba(201,168,76,0.1)' }} />
-                    <div>
-                        <div style={{ color: 'rgba(201,168,76,0.6)', fontSize: 10, letterSpacing: 2, marginBottom: 6 }}>LEFT HAND</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-                            {COLORS.map(c => (
-                                <div key={c} onClick={() => onLeftColorChange(c)} style={{
+                                <div key={c} onClick={() => { onLeftColorChange(c); if (hiddenHands[1]) onToggleHideHand(1); }} style={{
                                     width: 20, height: 20, borderRadius: '50%', cursor: 'pointer', background: c,
                                     border: leftColor === c ? '2px solid white' : '2px solid rgba(255,255,255,0.15)',
                                     transform: leftColor === c ? 'scale(1.2)' : 'scale(1)',
                                 }} />
                             ))}
+                            <div onClick={() => onToggleHideHand(1)} style={{
+                                width: 20, height: 20, borderRadius: '50%', cursor: 'pointer',
+                                background: hiddenHands[1] ? 'rgba(255,80,80,0.15)' : 'rgba(255,255,255,0.08)',
+                                border: hiddenHands[1] ? '2px solid rgba(255,80,80,0.8)' : '2px solid rgba(255,255,255,0.25)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 15, color: hiddenHands[1] ? 'rgba(255,80,80,0.9)' : 'rgba(255,255,255,0.4)',
+                                boxSizing: 'border-box', flexShrink: 0,
+                            }}><div style={{ width: 16, height: 16, borderRadius: '50%', background: hiddenHands[1] ? 'rgba(255,80,80,0.9)' : 'rgba(0,0,0,0.85)', border: '1.5px solid rgba(255,255,255,0.2)' }} /></div>
+                        </div>
+                    </div>
+                    <div style={{ width: 1, background: 'rgba(201,168,76,0.1)' }} />
+                    <div>
+                        <div style={{ color: 'rgba(201,168,76,0.6)', fontSize: 10, letterSpacing: 2, marginBottom: 6, whiteSpace: 'nowrap' }}>RIGHT HAND</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, width: 74 }}>
+                            {COLORS.map(c => (
+                                <div key={c} onClick={() => { onRightColorChange(c); if (hiddenHands[0]) onToggleHideHand(0); }} style={{
+                                    width: 20, height: 20, borderRadius: '50%', cursor: 'pointer', background: c,
+                                    border: rightColor === c ? '2px solid white' : '2px solid rgba(255,255,255,0.15)',
+                                    transform: rightColor === c ? 'scale(1.2)' : 'scale(1)',
+                                }} />
+                            ))}
+                            <div onClick={() => onToggleHideHand(0)} style={{
+                                width: 20, height: 20, borderRadius: '50%', cursor: 'pointer',
+                                background: hiddenHands[0] ? 'rgba(255,80,80,0.15)' : 'rgba(255,255,255,0.08)',
+                                border: hiddenHands[0] ? '2px solid rgba(255,80,80,0.8)' : '2px solid rgba(255,255,255,0.25)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 15, color: hiddenHands[0] ? 'rgba(255,80,80,0.9)' : 'rgba(255,255,255,0.4)',
+                                boxSizing: 'border-box', flexShrink: 0,
+                            }}><div style={{ width: 16, height: 16, borderRadius: '50%', background: hiddenHands[0] ? 'rgba(255,80,80,0.9)' : 'rgba(0,0,0,0.85)', border: '1.5px solid rgba(255,255,255,0.2)' }} /></div>
                         </div>
                     </div>
                 </div>
@@ -168,6 +184,7 @@ export default function TopBar({
     onEnterEdit,
     songTitle,
     loop, onToggleLoop,
+    hiddenHands, onToggleHideHand,
 }) {
     const [gearOpen, setGearOpen] = useState(false);
     const gearRef = useRef(null);
@@ -191,9 +208,9 @@ export default function TopBar({
 
                 {/* Center — go to start + play/pause + loop */}
                 <div style={styles.center}>
-                    <button style={styles.btn} onClick={onRestart} title="Go to beginning">⏮</button>
+                    <button style={styles.btn} onClick={onRestart} title="Go to beginning"><i className="bi bi-skip-start" /></button>
                     <button style={styles.btnLarge} onClick={onPlayPause}>
-                        {isPlaying ? '■' : '▶'}
+                        {isPlaying ? <i className="bi bi-pause" /> : <i className="bi bi-play" />}
                     </button>
                     <button
                         style={{
@@ -204,7 +221,7 @@ export default function TopBar({
                         }}
                         onClick={onToggleLoop}
                         title="Loop"
-                    >⟳</button>
+                    ><i className="bi bi-infinity" /></button>
                 </div>
 
                 <div style={styles.controls}>
@@ -235,6 +252,7 @@ export default function TopBar({
                     <HandColorButton
                         rightColor={rightColor} onRightColorChange={onRightColorChange}
                         leftColor={leftColor} onLeftColorChange={onLeftColorChange}
+                        hiddenHands={hiddenHands} onToggleHideHand={onToggleHideHand}
                     />
 
                     <div style={styles.divider} />
@@ -248,7 +266,7 @@ export default function TopBar({
                             }}
                             onClick={() => setGearOpen(o => !o)}
                         >
-                            ⚙
+                            <i className="bi bi-gear" />
                         </button>
 
                         {gearOpen && (
@@ -276,7 +294,7 @@ export default function TopBar({
                                 <div style={styles.dropDivider} />
                                 {/* Load MIDI */}
                                 <label style={styles.dropItem} htmlFor="midi-input">
-                                    <span>📂</span> Load MIDI
+                                    <i className="bi bi-cloud-arrow-down" /> Load MIDI
                                 </label>
                                 <input id="midi-input" type="file" accept=".mid,.midi"
                                     style={styles.fileInput}
@@ -287,7 +305,7 @@ export default function TopBar({
                                 {/* Edit Song */}
                                 <button style={styles.dropItem}
                                     onClick={() => { onEnterEdit(); setGearOpen(false); }}>
-                                    <span>✏️</span> Edit Song
+                                    <i className="bi bi-pencil" /> Edit Song
                                 </button>
                             </div>
                         )}

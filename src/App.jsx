@@ -23,11 +23,12 @@ export default function App() {
     const [fullPedal, setFullPedal] = useState(false);
     const [isPedalOn, setIsPedalOn] = useState(false);
     const [rightColor, setRightColor] = useState('#4a9eff');
-    const [leftColor, setLeftColor] = useState('#c9a84c');
+    const [leftColor, setLeftColor] = useState('#e63946');
     const [scheduled, setScheduled] = useState(new Set());
     const [activeKeys, setActiveKeys] = useState(new Map());
     const [editMode, setEditMode] = useState(false);
     const [loop, setLoop] = useState(false);
+    const [hiddenHands, setHiddenHands] = useState({ 0: false, 1: false });
 
     const stateRef = useRef({});
     stateRef.current = { isPlaying, playOffset, playStart, tempoScale };
@@ -61,8 +62,12 @@ export default function App() {
             const res = await fetch(file);
             const buffer = await res.arrayBuffer();
 
-            const notes = parseMidi(buffer)
+            const raw = parseMidi(buffer)
                 .filter(n => n.isPedal || (n.note >= MIN_NOTE && n.note <= MAX_NOTE));
+            const hasTwoHands = raw.some(n => !n.isPedal && n.hand === 1);
+            const notes = hasTwoHands ? raw : raw.map(n => ({ ...n, hand: 0 }));
+            setRightColor('#c9a84c');
+            setLeftColor(hasTwoHands ? '#e63946' : '#c9a84c');
 
             setSong(notes);
             setNoteObjs(notes.map(n => ({ ...n, sliced: false })));
@@ -187,8 +192,12 @@ export default function App() {
         const reader = new FileReader();
         reader.onload = ev => {
             try {
-                const notes = parseMidi(ev.target.result)
+                const raw = parseMidi(ev.target.result)
                     .filter(n => n.isPedal || (n.note >= MIN_NOTE && n.note <= MAX_NOTE));
+                const hasTwoHands = raw.some(n => !n.isPedal && n.hand === 1);
+                const notes = hasTwoHands ? raw : raw.map(n => ({ ...n, hand: 0 }));
+                setRightColor('#c9a84c');
+                setLeftColor(hasTwoHands ? '#e63946' : '#c9a84c');
                 if (!notes.filter(n => !n.isPedal).length) {
                     alert('No notes found in playable range.'); return;
                 }
@@ -264,6 +273,7 @@ export default function App() {
                 isPedalOn={isPedalOn}
                 fullPedal={fullPedal}
                 onToggleFullPedal={() => setFullPedal(f => !f)}
+                hiddenHands={hiddenHands}
                 rightColor={rightColor}
                 leftColor={leftColor}
                 songDuration={songDuration}
@@ -292,6 +302,8 @@ export default function App() {
                 songTitle={songTitle.toUpperCase()}
                 loop={loop}
                 onToggleLoop={() => setLoop(l => !l)}
+                hiddenHands={hiddenHands}
+                onToggleHideHand={(hand) => setHiddenHands(h => ({ ...h, [hand]: !h[hand] }))}
             />
             {!isPlaying && !editMode && (
                 <div style={{

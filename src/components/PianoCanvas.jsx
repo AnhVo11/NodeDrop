@@ -18,6 +18,7 @@ export default function PianoCanvas({
     scheduleNote, playNote, getCtx,
     onSongEnd, onScrub, zoom,
     isPedalOn, fullPedal, onToggleFullPedal,
+    hiddenHands,
     rightColor, leftColor,
     songDuration,
     editMode, onExitEdit, onAddNote, onUpdateNotes,
@@ -35,7 +36,7 @@ export default function PianoCanvas({
     stateRef.current = {
         noteObjs, isPlaying, playOffset, playStart,
         tempoScale, scheduled, activeKeys, zoom,
-        rightColor, leftColor, editMode,
+        rightColor, leftColor, editMode, hiddenHands,
     };
 
     const getPianoWidth = useCallback(
@@ -134,7 +135,9 @@ export default function PianoCanvas({
         const newSched = new Set(scheduled);
         let changed = false;
         stateRef.current.noteObjs.forEach((n, i) => {
+            const { hiddenHands } = stateRef.current;
             if (newSched.has(i) || n.isPedal || n.note < MIN_NOTE || n.note > MAX_NOTE) return;
+            if (hiddenHands[n.hand]) { newSched.add(i); changed = true; return; }
             const delay = (n.startTime - songNow) / tempoScale;
             if (delay < LOOK_AHEAD_SCH && delay > -0.05) {
                 newSched.add(i);
@@ -180,6 +183,7 @@ export default function PianoCanvas({
 
         noteObjs.forEach(n => {
             if (n.isPedal || n.note < MIN_NOTE || n.note > MAX_NOTE) return;
+            if (!editMode && hiddenHands[n.hand]) return;
             if (n.startTime > st + LOOK_AHEAD_VIS + 0.2) return;
             if (n.startTime + n.duration < st - 0.5) return;
 
@@ -236,9 +240,11 @@ export default function PianoCanvas({
         const ww = pw / getTotalWhites();
         const ky = ch - KEY_H;
 
+        const { hiddenHands, editMode } = stateRef.current;
         const activeMap = new Map();
         noteObjs.forEach(n => {
             if (n.isPedal || n.note < MIN_NOTE || n.note > MAX_NOTE) return;
+            if (!editMode && hiddenHands[n.hand]) return;
             if (n.startTime <= st && n.startTime + n.duration >= st)
                 activeMap.set(n.note, n.hand === 0 ? rightColor : leftColor);
         });
