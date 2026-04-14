@@ -583,27 +583,24 @@ export default function EditOverlay({
                     const y2 = timeToY(n.startTime, ch);
                     const top = Math.min(y1, y2);
                     const bottom = Math.max(y1, y2);
-                    const clampedTop = Math.max(BAR_H, top);
-                    const clampedBottom = Math.min(ch - KEY_H, bottom);
-                    if (clampedBottom > clampedTop) {
+                    if (bottom > BAR_H) {
                         ctx.fillStyle = 'rgba(230,57,70,0.15)';
-                        ctx.fillRect(0, clampedTop, cw, clampedBottom - clampedTop);
-                        // Two red border lines
+                        ctx.fillRect(0, top, cw, bottom - top);
                         ctx.strokeStyle = 'rgba(230,57,70,0.8)';
                         ctx.lineWidth = 2;
                         ctx.setLineDash([]);
-                        ctx.beginPath(); ctx.moveTo(0, clampedTop); ctx.lineTo(cw, clampedTop); ctx.stroke();
-                        ctx.beginPath(); ctx.moveTo(0, clampedBottom); ctx.lineTo(cw, clampedBottom); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(0, top); ctx.lineTo(cw, top); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(0, bottom); ctx.lineTo(cw, bottom); ctx.stroke();
                         const hx = cw / 2;
                         ctx.strokeStyle = 'rgba(230,57,70,0.95)';
                         ctx.lineWidth = 3;
                         ctx.lineCap = 'round';
-                        ctx.beginPath(); ctx.moveTo(hx - 30, clampedTop + 8); ctx.lineTo(hx + 30, clampedTop + 8); ctx.stroke();
-                        ctx.beginPath(); ctx.moveTo(hx - 30, clampedBottom - 8); ctx.lineTo(hx + 30, clampedBottom - 8); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(hx - 30, top + 8); ctx.lineTo(hx + 30, top + 8); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(hx - 30, bottom - 8); ctx.lineTo(hx + 30, bottom - 8); ctx.stroke();
                         ctx.fillStyle = 'rgba(230,57,70,0.6)';
                         ctx.font = '10px sans-serif';
-                        ctx.fillText('PEDAL', 8, clampedTop + 13);
-                        const midY = (clampedTop + clampedBottom) / 2;
+                        ctx.fillText('PEDAL', 8, top + 13);
+                        const midY = (top + bottom) / 2;
                         const midX = cw / 2;
                         ctx.beginPath();
                         ctx.arc(midX, midY, 14, 0, Math.PI * 2);
@@ -612,7 +609,6 @@ export default function EditOverlay({
                         ctx.strokeStyle = 'rgba(230,57,70,0.9)';
                         ctx.lineWidth = 2;
                         ctx.stroke();
-
                     }
                     pedalStart = null;
                 }
@@ -758,7 +754,7 @@ export default function EditOverlay({
         border: editTool === key
             ? '1px solid rgba(201,168,76,0.8)'
             : '1px solid rgba(201,168,76,0.25)',
-        color: editTool === key ? '#c9a84c' : 'rgba(201,168,76,0.45)',
+        color: editTool === key ? '#c9a84c' : 'rgba(201,168,76,0.9)',
         padding: 0, borderRadius: 6, cursor: 'pointer',
         fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase',
         fontFamily: 'inherit', WebkitTapHighlightColor: 'transparent',
@@ -770,7 +766,7 @@ export default function EditOverlay({
         width: 44, minWidth: 44, flexShrink: 0,
         background: 'transparent',
         border: '1px solid rgba(201,168,76,0.25)',
-        color: 'rgba(201,168,76,0.6)',
+        color: 'rgba(201,168,76,0.9)',
         padding: 0, borderRadius: 6, cursor: 'pointer',
         fontSize: 14, fontFamily: 'inherit',
         WebkitTapHighlightColor: 'transparent', textAlign: 'center',
@@ -796,7 +792,7 @@ export default function EditOverlay({
                 background: 'rgba(7,7,12,0.94)',
                 border: '1px solid rgba(201,168,76,0.2)',
                 borderRadius: 12, padding: '8px 12px',
-                backdropFilter: 'blur(12px)', zIndex: 30,
+                backdropFilter: 'blur(12px)', zIndex: 50,
                 width: 'calc(100vw - 16px)', maxWidth: 850,
                 boxSizing: 'border-box', height: 64,
             }}>
@@ -804,7 +800,7 @@ export default function EditOverlay({
                 {/* Hint */}
                 <div style={{
                     width: 200, minWidth: 200, flexShrink: 0,
-                    color: 'rgba(255,255,255,0.3)', fontSize: 10,
+                    color: 'rgba(255,255,255,0.7)', fontSize: 10,
                     letterSpacing: 1.5, textTransform: 'uppercase', lineHeight: 1.5,
                     display: 'flex', alignItems: 'center',
                 }}>
@@ -814,8 +810,8 @@ export default function EditOverlay({
                 <div style={{ width: 1, background: 'rgba(201,168,76,0.15)', flexShrink: 0, alignSelf: 'stretch' }} />
 
                 {/* Undo / Redo */}
-                <button style={undoRedoBtn} onClick={undo} title="Undo">↩</button>
-                <button style={undoRedoBtn} onClick={redo} title="Redo">↪</button>
+                <button style={undoRedoBtn} onClick={undo} title="Undo"><i className="bi bi-arrow-counterclockwise" /></button>
+                <button style={undoRedoBtn} onClick={redo} title="Redo"><i className="bi bi-arrow-clockwise" /></button>
 
                 <div style={{ width: 1, background: 'rgba(201,168,76,0.15)', flexShrink: 0, alignSelf: 'stretch' }} />
 
@@ -844,7 +840,7 @@ export default function EditOverlay({
                             border: editTool === 'paint' && paintHand === hand
                                 ? `1px solid ${color}`
                                 : '1px solid rgba(201,168,76,0.25)',
-                            color: editTool === 'paint' && paintHand === hand ? color : 'rgba(201,168,76,0.35)',
+                            color: editTool === 'paint' && paintHand === hand ? color : 'rgba(201,168,76,0.8)',
                             padding: 0, borderRadius: 6, cursor: 'pointer',
                             fontSize: 11, letterSpacing: 1.5,
                             fontFamily: 'inherit', WebkitTapHighlightColor: 'transparent',

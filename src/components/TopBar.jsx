@@ -5,7 +5,6 @@ const styles = {
         position: 'fixed', top: 0, left: 0, right: 0, height: 56,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 16px', zIndex: 20,
-        position: 'fixed',
         background: 'linear-gradient(180deg, rgba(7,7,12,0.97) 0%, transparent 100%)',
     },
     brand: {
@@ -79,35 +78,6 @@ const COLORS = [
     '#4a9eff', '#c9a84c', '#4aff91', '#ff4a4a',
     '#b44aff', '#ff4adb', '#ffffff', '#ff944a',
 ];
-
-function ColorButton({ label, value, onChange }) {
-    const [open, setOpen] = useState(false);
-    return (
-        <div style={{ position: 'relative' }}>
-            <button style={styles.textBtn} onClick={() => setOpen(o => !o)}>
-                <div style={{ width: 12, height: 12, borderRadius: '50%', background: value, flexShrink: 0 }} />
-                {label}
-            </button>
-            {open && (
-                <div style={{
-                    position: 'absolute', top: 38, left: 0,
-                    background: '#12121c', border: '1px solid rgba(201,168,76,0.3)',
-                    borderRadius: 8, padding: 10, zIndex: 100,
-                    display: 'flex', flexWrap: 'wrap', gap: 8, width: 140,
-                }}>
-                    {COLORS.map(c => (
-                        <div key={c} onClick={() => { onChange(c); setOpen(false); }} style={{
-                            width: 22, height: 22, borderRadius: '50%', cursor: 'pointer',
-                            background: c,
-                            border: value === c ? '2px solid white' : '2px solid rgba(255,255,255,0.15)',
-                            transform: value === c ? 'scale(1.2)' : 'scale(1)',
-                        }} />
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
 
 function HandColorButton({ rightColor, onRightColorChange, leftColor, onLeftColorChange, hiddenHands, onToggleHideHand }) {
     const [open, setOpen] = useState(false);
@@ -185,6 +155,7 @@ export default function TopBar({
     songTitle,
     loop, onToggleLoop,
     hiddenHands, onToggleHideHand,
+    editMode,
 }) {
     const [gearOpen, setGearOpen] = useState(false);
     const gearRef = useRef(null);
@@ -217,7 +188,7 @@ export default function TopBar({
                             ...styles.btn,
                             background: loop ? 'rgba(201,168,76,0.2)' : 'transparent',
                             border: loop ? '1px solid rgba(201,168,76,0.8)' : '1px solid rgba(201,168,76,0.35)',
-                            color: loop ? '#c9a84c' : 'rgba(201,168,76,0.45)',
+                            color: loop ? '#c9a84c' : 'rgba(201,168,76,0.9)',
                         }}
                         onClick={onToggleLoop}
                         title="Loop"
@@ -239,7 +210,7 @@ export default function TopBar({
 
                     {/* Zoom */}
                     <div style={styles.sliderWrap}>
-                        <span style={styles.lbl}>ZOOM</span>
+                        <span style={styles.lbl}>VIEW</span>
                         <input type="range" min="100" max="400" value={zoom}
                             onChange={e => onZoomChange(parseInt(e.target.value))}
                             style={{ width: 64, height: 2, accentColor: '#c9a84c' }} />
@@ -313,7 +284,7 @@ export default function TopBar({
 
                 </div>
             </div>
-            <div style={styles.songTitle}>{songTitle}</div>
+            {!editMode && <div style={styles.songTitle}>{songTitle}</div>}
         </>
     );
 }

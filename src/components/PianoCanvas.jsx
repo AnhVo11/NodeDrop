@@ -6,7 +6,6 @@ const MIN_NOTE = 21;
 const MAX_NOTE = 108;
 const KEY_H = 130;
 const BAR_H = 56;
-const LOOK_AHEAD_VIS = 4.5;
 const LOOK_AHEAD_SCH = 0.25;
 const PIXELS_PER_SECOND = 120;
 
@@ -33,14 +32,15 @@ export default function PianoCanvas({
     const fontSizeRef = useRef(15);
 
     const stateRef = useRef({});
+    const lookAhead = 4.5 + (zoom - 100) / 300 * Math.max(0, songDuration - 4.5);
     stateRef.current = {
         noteObjs, isPlaying, playOffset, playStart,
         tempoScale, scheduled, activeKeys, zoom,
-        rightColor, leftColor, editMode, hiddenHands,
+        rightColor, leftColor, editMode, hiddenHands, lookAhead,
     };
 
     const getPianoWidth = useCallback(
-        () => window.innerWidth * (stateRef.current.zoom / 100),
+        () => window.innerWidth,
         []
     );
 
@@ -55,11 +55,12 @@ export default function PianoCanvas({
         const pw = getPianoWidth();
         const x = noteX(n.note, pw) - scrollX.current;
         const w = noteW(n.note, pw);
+        const la = stateRef.current.lookAhead;
         const ahead2 = n.startTime - currentTime();
         const ahead1 = (n.startTime + n.duration) - currentTime();
         const fallH = ch - KEY_H - BAR_H;
-        const y2 = BAR_H + fallH * (1 - ahead2 / LOOK_AHEAD_VIS);
-        const y1 = BAR_H + fallH * (1 - ahead1 / LOOK_AHEAD_VIS);
+        const y2 = BAR_H + fallH * (1 - ahead2 / la);
+        const y1 = BAR_H + fallH * (1 - ahead1 / la);
         return { x: x - w / 2, y: Math.min(y1, y2), w, h: Math.max(Math.abs(y2 - y1), 4) };
     }, [currentTime, getPianoWidth]);
 
@@ -184,7 +185,7 @@ export default function PianoCanvas({
         noteObjs.forEach(n => {
             if (n.isPedal || n.note < MIN_NOTE || n.note > MAX_NOTE) return;
             if (!editMode && hiddenHands[n.hand]) return;
-            if (n.startTime > st + LOOK_AHEAD_VIS + 0.2) return;
+            if (n.startTime > st + stateRef.current.lookAhead + 0.2) return;
             if (n.startTime + n.duration < st - 0.5) return;
 
             const r = getNoteRect(n, ch);
@@ -230,7 +231,7 @@ export default function PianoCanvas({
 
         ctx.shadowBlur = 0;
         ctx.restore();
-    }, [currentTime, getNoteRect]);
+    }, [currentTime, getNoteRect, hiddenHands]);
 
     // ---- Draw Piano Keys ----
     const drawPianoKeys = useCallback((ctx, cw, ch) => {

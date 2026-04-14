@@ -85,6 +85,7 @@ export default function App() {
     }
     useEffect(() => {
         loadSong('chopin'); // default
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
     const hasPedal = useMemo(() => song.some(n => n.isPedal), [song]);
 
@@ -300,6 +301,7 @@ export default function App() {
                 onLeftColorChange={setLeftColor}
                 onEnterEdit={handleEnterEdit}
                 songTitle={songTitle.toUpperCase()}
+                editMode={editMode}
                 loop={loop}
                 onToggleLoop={() => setLoop(l => !l)}
                 hiddenHands={hiddenHands}
