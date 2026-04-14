@@ -299,13 +299,15 @@ export default function EditOverlay({
             const ia = interactRef.current;
             if (ia?.type === 'add') {
                 const prev = ia.addPreview;
-                const fallH = ch - KEY_H - BAR_H;
-                const rawDur = Math.abs(prev.currentY - prev.startY) * LOOK_AHEAD_VIS / fallH;
+                const topY = Math.min(prev.currentY, prev.startY);
+                const bottomY = Math.max(prev.currentY, prev.startY);
+                const startTime = yToSongTime(bottomY, ch);
+                const endTime = yToSongTime(topY, ch);
                 pushUndo(stateRef.current.noteObjs);
                 onAddNote({
                     note: prev.note,
-                    startTime: Math.max(0, prev.startTime),
-                    duration: Math.max(0.1, rawDur),
+                    startTime: Math.max(0, startTime),
+                    duration: Math.max(0.1, endTime - startTime),
                     vel: 0.7,
                     hand: prev.note >= 60 ? 0 : 1,
                     sustain: false,
@@ -412,12 +414,14 @@ export default function EditOverlay({
             if (!ia || ia.type !== 'add') return;
             const ch = canvas.height;
             const prev = ia.addPreview;
-            const fallH = ch - KEY_H - BAR_H;
-            const rawDur = Math.abs(prev.currentY - prev.startY) * LOOK_AHEAD_VIS / fallH;
+            const topY = Math.min(prev.currentY, prev.startY);
+            const bottomY = Math.max(prev.currentY, prev.startY);
+            const startTime = yToSongTime(bottomY, ch);
+            const endTime = yToSongTime(topY, ch);
             const pNote = {
                 note: prev.note,
-                startTime: prev.startTime,
-                duration: Math.max(0.1, rawDur),
+                startTime: Math.max(0, startTime),
+                duration: Math.max(0.1, endTime - startTime),
                 hand: prev.note >= 60 ? 0 : 1,
             };
             const r = getNoteRect(pNote, ch);
@@ -491,9 +495,11 @@ export default function EditOverlay({
             ? '1px solid rgba(201,168,76,0.8)'
             : '1px solid rgba(201,168,76,0.25)',
         color: editTool === key ? '#c9a84c' : 'rgba(201,168,76,0.45)',
-        padding: '8px 0', borderRadius: 6, cursor: 'pointer',
+        padding: 0, borderRadius: 6, cursor: 'pointer',
         fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase',
-        fontFamily: 'inherit', WebkitTapHighlightColor: 'transparent', textAlign: 'center',
+        fontFamily: 'inherit', WebkitTapHighlightColor: 'transparent',
+        textAlign: 'center', alignSelf: 'stretch',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
     });
 
     const undoRedoBtn = {
@@ -501,9 +507,11 @@ export default function EditOverlay({
         background: 'transparent',
         border: '1px solid rgba(201,168,76,0.25)',
         color: 'rgba(201,168,76,0.6)',
-        padding: '8px 0', borderRadius: 6, cursor: 'pointer',
+        padding: 0, borderRadius: 6, cursor: 'pointer',
         fontSize: 14, fontFamily: 'inherit',
         WebkitTapHighlightColor: 'transparent', textAlign: 'center',
+        alignSelf: 'stretch',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
     };
 
     const hintText =
@@ -521,19 +529,21 @@ export default function EditOverlay({
 
             <div style={{
                 position: 'fixed', top: 64, left: '50%', transform: 'translateX(-50%)',
-                display: 'flex', alignItems: 'center', gap: 6,
+                display: 'flex', alignItems: 'stretch', gap: 6,
                 background: 'rgba(7,7,12,0.94)',
                 border: '1px solid rgba(201,168,76,0.2)',
                 borderRadius: 12, padding: '8px 12px',
                 backdropFilter: 'blur(12px)', zIndex: 30,
                 width: 'calc(100vw - 16px)', maxWidth: 850,
                 boxSizing: 'border-box',
+                height: 64,
             }}>
 
                 <div style={{
                     width: 200, minWidth: 200, flexShrink: 0,
                     color: 'rgba(255,255,255,0.3)', fontSize: 10,
                     letterSpacing: 1.5, textTransform: 'uppercase', lineHeight: 1.5,
+                    display: 'flex', alignItems: 'center',
                 }}>
                     {hintText}
                 </div>
@@ -562,10 +572,12 @@ export default function EditOverlay({
                         width: 70, minWidth: 70, flexShrink: 0,
                         background: 'rgba(201,168,76,0.15)',
                         border: '1px solid rgba(201,168,76,0.6)',
-                        color: '#c9a84c', padding: '8px 0', borderRadius: 6,
+                        color: '#c9a84c', padding: 0, borderRadius: 6,
                         cursor: 'pointer', fontSize: 10, letterSpacing: 2,
                         textTransform: 'uppercase', fontFamily: 'inherit',
                         WebkitTapHighlightColor: 'transparent', textAlign: 'center',
+                        alignSelf: 'stretch',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}
                     onClick={onExitEdit}
                 >
