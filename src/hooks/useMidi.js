@@ -1,0 +1,71 @@
+export function parseMidi(buffer) {
+  const d = new Uint8Array(buffer);
+  let p = 0;
+
+  const ru32 = () => { const v=(d[p]<<24)|(d[p+1]<<16)|(d[p+2]<<8)|d[p+3]; p+=4; return v>>>0; };
+  const ru16 = () => { const v=(d[p]<<8)|d[p+1]; p+=2; return v; };
+  const rvar = () => { let v=0,b; do{b=d[p++];v=(v<<7)|(b&0x7f);}while(b&0x80); return v; };
+
+  p = 4; ru32();
+  ru16(); // format (unused)
+  const ntrk = ru16();
+  const div  = ru16();
+
+  const tempoMap = [{ tick:0, us:500000 }];
+  const rawNotes = [];
+
+  for (let t = 0; t < ntrk; t++) {
+    p += 4;
+    const tlen = ru32();
+    const tend = p + tlen;
+    let tick = 0, last = 0;
+    const open = {};
+
+    while (p < tend) {
+      tick += rvar();
+      let sb = d[p];
+      if (sb & 0x80) { last = sb; p++; } else { sb = last; }
+      const type = sb & 0xf0;
+      const ch   = sb & 0x0f;
+
+      if (type === 0x90) {
+        const note = d[p++], vel = d[p++];
+        if (vel > 0) { open[note] = { tick, vel, hand: ch === 1 ? 1 : 0 }; }
+        else if (open[note]) { rawNotes.push({...open[note], endTick:tick, note}); delete open[note]; }
+      } else if (type === 0x80) {
+        const note = d[p++]; p++;
+        if (open[note]) { rawNotes.push({...open[note], endTick:tick, note}); delete open[note]; }
+      } else if (type===0xa0||type===0xb0||type===0xe0) { p+=2; }
+        else if (type===0xc0||type===0xd0) { p+=1; }
+        else if (sb===0xff) {
+          const mt = d[p++], ml = rvar();
+          if (mt===0x51 && ml===3) tempoMap.push({ tick, us:(d[p]<<16)|(d[p+1]<<8)|d[p+2] });
+          p += ml;
+        } else if (sb===0xf0||sb===0xf7) { p+=rvar(); }
+          else p++;
+    }
+    p = tend;
+  }
+
+  tempoMap.sort((a,b) => a.tick - b.tick);
+
+  function tick2sec(tk) {
+    let sec=0, lt=0, lu=500000;
+    for (const e of tempoMap) {
+      if (e.tick >= tk) break;
+      sec += ((Math.min(e.tick,tk)-lt)/div)*(lu/1e6);
+      lt=e.tick; lu=e.us;
+    }
+    return sec + ((tk-lt)/div)*(lu/1e6);
+  }
+
+  return rawNotes
+    .map(n => ({
+      note:      n.note,
+      startTime: tick2sec(n.tick),
+      duration:  tick2sec(n.endTick) - tick2sec(n.tick),
+      vel:       n.vel / 127,
+      hand:      n.hand,
+    }))
+    .sort((a,b) => a.startTime - b.startTime);
+}
