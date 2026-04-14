@@ -3,7 +3,7 @@ import TopBar from './components/TopBar';
 import PianoCanvas from './components/PianoCanvas';
 import { useAudio } from './hooks/useAudio';
 import { parseMidi } from './hooks/useMidi';
-import { buildFurElise } from './data/furElise';
+
 
 const MIN_NOTE = 21;
 const MAX_NOTE = 108;
@@ -11,9 +11,9 @@ const MAX_NOTE = 108;
 export default function App() {
     const { initAudio, playNote, scheduleNote, getCtx, setPedal } = useAudio();
 
-    const [song, setSong] = useState(() => buildFurElise());
-    const [noteObjs, setNoteObjs] = useState(() => buildFurElise().map(n => ({ ...n, sliced: false })));
-    const [songTitle, setSongTitle] = useState('Für Elise — Beethoven');
+    const [song, setSong] = useState([]);
+    const [noteObjs, setNoteObjs] = useState([]);
+    const [songTitle, setSongTitle] = useState('Chopin - Nocturne in E Flat Major');
     const [isPlaying, setIsPlaying] = useState(false);
     const [playOffset, setPlayOffset] = useState(0);
     const [playStart, setPlayStart] = useState(0);
@@ -39,7 +39,47 @@ export default function App() {
         if (!isPlaying || !aCtx) return playOffset;
         return playOffset + (aCtx.currentTime - playStart) * tempoScale;
     }, [getCtx]);
+    const SONGS = {
+        chopin: {
+            file: '/midi/chopin.mid',
+            title: 'Chopin - Nocturne in E Flat Major'
+        },
+        river: {
+            file: '/midi/river.mid',
+            title: 'Yiruma - River Flows in You'
+        },
+        kiss: { // 👈 ADD THIS
+            file: '/midi/kiss.mid',
+            title: 'Yiruma - Kiss the Rain'
+        }
+    };
 
+    async function loadSong(key) {
+        try {
+            const { file, title } = SONGS[key];
+            const res = await fetch(file);
+            const buffer = await res.arrayBuffer();
+
+            const notes = parseMidi(buffer)
+                .filter(n => n.isPedal || (n.note >= MIN_NOTE && n.note <= MAX_NOTE));
+
+            setSong(notes);
+            setNoteObjs(notes.map(n => ({ ...n, sliced: false })));
+            setSongTitle(title);
+
+            setIsPlaying(false);
+            setPlayOffset(0);
+            setPlayStart(0);
+            setScheduled(new Set());
+            setActiveKeys(new Map());
+
+        } catch (err) {
+            console.error('Failed to load song:', err);
+        }
+    }
+    useEffect(() => {
+        loadSong('chopin'); // default
+    }, []);
     const hasPedal = useMemo(() => song.some(n => n.isPedal), [song]);
 
     useEffect(() => {
@@ -228,6 +268,7 @@ export default function App() {
                 onMidiLoad={handleMidiLoad}
                 tempo={tempo}
                 onTempoChange={handleTempoChange}
+                onLoadSong={loadSong}
                 zoom={zoom}
                 onZoomChange={handleZoomChange}
                 fullPedal={fullPedal}

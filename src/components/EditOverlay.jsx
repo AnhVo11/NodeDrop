@@ -7,7 +7,7 @@ const MAX_NOTE = 108;
 const KEY_H = 130;
 const BAR_H = 56;
 const LOOK_AHEAD_VIS = 4.5;
-const HANDLE_SIZE = 16; // px from top or bottom = resize zone
+const HANDLE_SIZE = 16;
 
 export default function EditOverlay({
     canvasRef,
@@ -26,12 +26,13 @@ export default function EditOverlay({
     const [editTool, setEditTool] = useState(null);
     const editToolRef = useRef(null);
     const sustainTrailRef = useRef([]);
-    const lastSustainPt = useRef(null);
     const interactRef = useRef(null);
     const particlesRef = useRef([]);
     const rafRef = useRef(null);
     const overlayCanvasRef = useRef(null);
     const editScrubRef = useRef(null);
+    // Pedal drawing state
+    const pedalDrawRef = useRef(null); // { startTime, currentTime }
 
     const stateRef = useRef({});
     stateRef.current = { noteObjs, rightColor, leftColor };
@@ -52,6 +53,13 @@ export default function EditOverlay({
         const y1 = BAR_H + fallH * (1 - ahead1 / LOOK_AHEAD_VIS);
         return { x: x - w / 2, y: Math.min(y1, y2), w, h: Math.max(Math.abs(y2 - y1), 4) };
     }, [currentTime, getPianoWidth, scrollX]);
+
+    // Convert song time to Y position
+    const timeToY = useCallback((songTime, ch) => {
+        const ahead = songTime - currentTime();
+        const fallH = ch - KEY_H - BAR_H;
+        return BAR_H + fallH * (1 - ahead / LOOK_AHEAD_VIS);
+    }, [currentTime]);
 
     function yToSongTime(y, ch) {
         const fallH = ch - KEY_H - BAR_H;
@@ -77,7 +85,6 @@ export default function EditOverlay({
         return null;
     }
 
-    // Returns hit zone: 'top', 'bottom', 'middle', or null
     function findNoteAt(x, y, ch) {
         const { noteObjs } = stateRef.current;
         for (let i = noteObjs.length - 1; i >= 0; i--) {
@@ -91,6 +98,75 @@ export default function EditOverlay({
                 else if (y >= r.y + r.h - HANDLE_SIZE) zone = 'bottom';
             }
             return { index: i, note: n, rect: r, zone };
+        }
+        return null;
+    }
+
+    function findPedalRegionAt(y, ch) {
+        const { noteObjs } = stateRef.current;
+        let pedalStart = null;
+        for (let i = 0; i < noteObjs.length; i++) {
+            const n = noteObjs[i];
+            if (!n.isPedal) continue;
+            if (n.vel >= 64) {
+                pedalStart = n.startTime;
+            } else if (pedalStart !== null) {
+                const y1 = timeToY(pedalStart, ch);
+                const y2 = timeToY(n.startTime, ch);
+                const top = Math.min(y1, y2);
+                const bottom = Math.max(y1, y2);
+                if (y >= top && y <= bottom) {
+                    return { startTime: pedalStart, endTime: n.startTime };
+                }
+                pedalStart = null;
+            }
+        }
+        return null;
+    }
+
+    function findPedalHandleAt(y, ch) {
+        const { noteObjs } = stateRef.current;
+        let pedalStartIdx = -1;
+        for (let i = 0; i < noteObjs.length; i++) {
+            const n = noteObjs[i];
+            if (!n.isPedal) continue;
+            if (n.vel >= 64) {
+                pedalStartIdx = i;
+            } else if (pedalStartIdx !== -1) {
+                const startN = noteObjs[pedalStartIdx];
+                const y1 = timeToY(startN.startTime, ch);
+                const y2 = timeToY(n.startTime, ch);
+                const top = Math.min(y1, y2);
+                const bottom = Math.max(y1, y2);
+                if (Math.abs(y - top) <= 18) {
+                    return { edge: 'end', idx: i };
+                }
+                if (Math.abs(y - bottom) <= 18) {
+                    return { edge: 'start', idx: pedalStartIdx };
+                }
+                pedalStartIdx = -1;
+            }
+        }
+        return null;
+    }
+
+    function findPedalMiddleAt(y, ch) {
+        const { noteObjs } = stateRef.current;
+        let pedalStartIdx = -1;
+        for (let i = 0; i < noteObjs.length; i++) {
+            const n = noteObjs[i];
+            if (!n.isPedal) continue;
+            if (n.vel >= 64) { pedalStartIdx = i; }
+            else if (pedalStartIdx !== -1) {
+                const startN = noteObjs[pedalStartIdx];
+                const y1 = timeToY(startN.startTime, ch);
+                const y2 = timeToY(n.startTime, ch);
+                const mid = (y1 + y2) / 2;
+                if (Math.abs(y - mid) <= 20) {
+                    return { startIdx: pedalStartIdx, endIdx: i };
+                }
+                pedalStartIdx = -1;
+            }
         }
         return null;
     }
@@ -111,39 +187,21 @@ export default function EditOverlay({
         });
     }
 
-    // ---- Swipe notes ----
-    function checkSwipeNotes(x1, y1, x2, y2, ch, action) {
+    // ---- Delete swipe ----
+    function checkDeleteSwipe(x1, y1, x2, y2, ch) {
         const { noteObjs, rightColor, leftColor } = stateRef.current;
         const st = currentTime();
-        let changed = false;
-
-        if (action === 'remove') {
-            const updated = noteObjs.filter(n => {
-                if (n.isPedal || n.note < MIN_NOTE || n.note > MAX_NOTE) return true;
-                if (n.startTime > st + LOOK_AHEAD_VIS || n.startTime + n.duration < st - 0.2) return true;
-                const r = getNoteRect(n, ch);
-                if (r.y + r.h > ch - KEY_H + 10) return true;
-                if (Math.max(x1, x2) < r.x || Math.min(x1, x2) > r.x + r.w) return true;
-                if (Math.max(y1, y2) < r.y || Math.min(y1, y2) > r.y + r.h) return true;
-                spawnParticles(r.x + r.w / 2, r.y + r.h / 2, n.hand === 0 ? rightColor : leftColor);
-                return false;
-            });
-            if (updated.length !== noteObjs.length) { pushUndo(noteObjs); onUpdateNotes(updated); }
-            return;
-        }
-
-        const updated = noteObjs.map(n => {
-            if (n.isPedal || n.note < MIN_NOTE || n.note > MAX_NOTE) return n;
-            if (n.startTime > st + LOOK_AHEAD_VIS || n.startTime + n.duration < st - 0.2) return n;
+        const updated = noteObjs.filter(n => {
+            if (n.isPedal || n.note < MIN_NOTE || n.note > MAX_NOTE) return true;
+            if (n.startTime > st + LOOK_AHEAD_VIS || n.startTime + n.duration < st - 0.2) return true;
             const r = getNoteRect(n, ch);
-            if (r.y + r.h > ch - KEY_H + 10) return n;
-            if (Math.max(x1, x2) < r.x || Math.min(x1, x2) > r.x + r.w) return n;
-            if (Math.max(y1, y2) < r.y || Math.min(y1, y2) > r.y + r.h) return n;
-            if (n.sustain === action) return n;
-            changed = true;
-            return { ...n, sustain: action };
+            if (r.y + r.h > ch - KEY_H + 10) return true;
+            if (Math.max(x1, x2) < r.x || Math.min(x1, x2) > r.x + r.w) return true;
+            if (Math.max(y1, y2) < r.y || Math.min(y1, y2) > r.y + r.h) return true;
+            spawnParticles(r.x + r.w / 2, r.y + r.h / 2, n.hand === 0 ? rightColor : leftColor);
+            return false;
         });
-        if (changed) { pushUndo(noteObjs); onUpdateNotes(updated); }
+        if (updated.length !== noteObjs.length) { pushUndo(noteObjs); onUpdateNotes(updated); }
     }
 
     // ---- Touch / Mouse ----
@@ -159,26 +217,63 @@ export default function EditOverlay({
             if (e.touches) e.preventDefault();
             const { x, y } = getXY(e);
             const ch = canvas.height;
-            const cw = canvas.width;
             const tool = editToolRef.current;
             const barY = ch - KEY_H - 6;
 
             // Progress bar seek
             if (y >= barY - 16 && y <= barY + 22) {
-                editScrubRef.current = { startY: y, startX: x, startTime: currentTime(), isBar: true };
+                editScrubRef.current = { startX: x, startTime: currentTime(), isBar: true };
                 return;
             }
 
-            // Block new interaction if one already in progress
-            if (interactRef.current || lastSustainPt.current) return;
-
-            if (tool === 'sustain' || tool === 'unsustain' || tool === 'remove') {
-                lastSustainPt.current = { x, y };
-                sustainTrailRef.current = [{ x, y }];
+            // ---- PEDAL tool ----
+            if (tool === 'pedal') {
+                // Check middle circle FIRST before anything else
+                const mid = findPedalMiddleAt(y, ch);
+                if (mid) {
+                    pushUndo(stateRef.current.noteObjs);
+                    const startN = stateRef.current.noteObjs[mid.startIdx];
+                    const endN = stateRef.current.noteObjs[mid.endIdx];
+                    interactRef.current = {
+                        type: 'pedalMove',
+                        startIdx: mid.startIdx,
+                        endIdx: mid.endIdx,
+                        origStartTime: startN.startTime,
+                        origEndTime: endN.startTime,
+                        startY: y,
+                    };
+                    return;
+                }
+                // Check handle edges
+                const handle = findPedalHandleAt(y, ch);
+                if (handle) {
+                    pushUndo(stateRef.current.noteObjs);
+                    interactRef.current = {
+                        type: 'pedalResize',
+                        edge: handle.edge,
+                        idx: handle.idx,
+                        origTime: stateRef.current.noteObjs[handle.idx].startTime,
+                        startY: y,
+                    };
+                    return;
+                }
+                // Only draw new region if not hitting anything
+                const startTime = yToSongTime(y, ch);
+                pedalDrawRef.current = { startTime, currentTime: startTime, startY: y };
                 return;
             }
 
-            // Smart mode
+            // Block multiple interactions
+            if (interactRef.current || pedalDrawRef.current) return;
+
+            // ---- DELETE tool ----
+            if (tool === 'remove') {
+                interactRef.current = { type: 'deleteSwipe', lastX: x, lastY: y };
+                checkDeleteSwipe(x - 1, y - 1, x + 1, y + 1, ch);
+                return;
+            }
+
+            // ---- Smart mode ----
             const hit = findNoteAt(x, y, ch);
             if (hit) {
                 pushUndo(stateRef.current.noteObjs);
@@ -211,29 +306,59 @@ export default function EditOverlay({
             const { x, y } = getXY(e);
             const ch = canvas.height;
             const cw = canvas.width;
-            const tool = editToolRef.current;
 
             // Progress bar seek
-            if (editScrubRef.current) {
-                if (editScrubRef.current.isBar) {
-                    const ratio = Math.max(0, Math.min(1, x / cw));
-                    onScrub(ratio * songDuration);
-                }
+            if (editScrubRef.current?.isBar) {
+                onScrub(Math.max(0, Math.min(1, x / cw)) * songDuration);
                 return;
             }
 
-            if ((tool === 'sustain' || tool === 'unsustain' || tool === 'remove') && lastSustainPt.current) {
-                const prev = lastSustainPt.current;
-                const action = tool === 'sustain' ? true : tool === 'unsustain' ? false : 'remove';
-                checkSwipeNotes(prev.x, prev.y, x, y, ch, action);
-                lastSustainPt.current = { x, y };
-                sustainTrailRef.current.push({ x, y });
-                if (sustainTrailRef.current.length > 30) sustainTrailRef.current.shift();
+            // Pedal drawing
+            if (pedalDrawRef.current) {
+                pedalDrawRef.current.currentTime = yToSongTime(y, ch);
+                pedalDrawRef.current.currentY = y;
                 return;
             }
 
             const ia = interactRef.current;
             if (!ia) return;
+
+            // Pedal resize
+            if (ia?.type === 'pedalMove') {
+                const fallH = ch - KEY_H - BAR_H;
+                const dy = y - ia.startY;
+                const timeDelta = -dy * LOOK_AHEAD_VIS / fallH;
+                const { noteObjs } = stateRef.current;
+                const updated = noteObjs.map((n, i) => {
+                    if (i === ia.startIdx) return { ...n, startTime: Math.max(0, ia.origStartTime + timeDelta) };
+                    if (i === ia.endIdx) return { ...n, startTime: Math.max(0, ia.origEndTime + timeDelta) };
+                    return n;
+                });
+                onUpdateNotes(updated);
+                return;
+            }
+
+            if (ia?.type === 'pedalResize') {
+                const fallH = ch - KEY_H - BAR_H;
+                const dy = y - ia.startY;
+                const timeDelta = -dy * LOOK_AHEAD_VIS / fallH;
+                const { noteObjs } = stateRef.current;
+                const updated = noteObjs.map((n, i) => {
+                    if (i !== ia.idx) return n;
+                    return { ...n, startTime: Math.max(0, ia.origTime + timeDelta) };
+                });
+                onUpdateNotes(updated);
+                return;
+            }
+
+            // Delete swipe
+            if (ia.type === 'deleteSwipe') {
+                checkDeleteSwipe(ia.lastX, ia.lastY, x, y, ch);
+                ia.lastX = x; ia.lastY = y;
+                sustainTrailRef.current.push({ x, y });
+                if (sustainTrailRef.current.length > 30) sustainTrailRef.current.shift();
+                return;
+            }
 
             if (ia.type === 'add') {
                 ia.addPreview.currentY = y;
@@ -258,20 +383,17 @@ export default function EditOverlay({
                 });
                 onUpdateNotes(updated);
             }
+
             if (ia.type === 'resize') {
                 const delta = dy * LOOK_AHEAD_VIS / fallH;
                 const updated = noteObjs.map((n, i) => {
                     if (i !== ia.noteIndex) return n;
                     if (ia.zone === 'top') {
-                        // Top edge = note END time
-                        // Drag up (dy < 0) → delta negative → duration increases ✓
                         return {
                             ...n,
                             duration: Math.max(0.05, ia.origDuration - delta),
                         };
                     } else {
-                        // Bottom edge = note START time
-                        // Drag down (dy > 0) → startTime earlier → duration longer ✓
                         return {
                             ...n,
                             startTime: Math.max(0, ia.origStart - delta),
@@ -281,17 +403,63 @@ export default function EditOverlay({
                 });
                 onUpdateNotes(updated);
             }
-
         };
 
         const onEnd = () => {
             const ch = canvas.height;
-            const tool = editToolRef.current;
 
             if (editScrubRef.current) { editScrubRef.current = null; return; }
 
-            if (tool === 'sustain' || tool === 'unsustain' || tool === 'remove') {
-                lastSustainPt.current = null;
+            if (interactRef.current?.type === 'pedalResize' ||
+                interactRef.current?.type === 'pedalMove') {
+                interactRef.current = null; return;
+            }
+
+            // Finish pedal region
+            if (pedalDrawRef.current) {
+                const pd = pedalDrawRef.current;
+                const ch = canvas.height;
+                const t1 = Math.min(pd.startTime, pd.currentTime);
+                const t2 = Math.max(pd.startTime, pd.currentTime);
+                const dur = t2 - t1;
+
+                // Tap (no drag) on existing pedal region = delete it
+                if (dur < 0.05) {
+                    const hit = findPedalRegionAt(pd.startY, ch);
+                    if (hit) {
+                        pushUndo(stateRef.current.noteObjs);
+                        const filtered = stateRef.current.noteObjs.filter(n => {
+                            if (!n.isPedal) return true;
+                            return !(n.startTime >= hit.startTime - 0.01 && n.startTime <= hit.endTime + 0.01);
+                        });
+                        onUpdateNotes(filtered);
+                    }
+                    pedalDrawRef.current = null;
+                    return;
+                }
+                if (dur > 0.05) {
+                    pushUndo(stateRef.current.noteObjs);
+                    // Remove any existing pedal events that overlap this region
+                    const filtered = stateRef.current.noteObjs.filter(n => {
+                        if (!n.isPedal) return true;
+                        // Remove pedal events inside the new region
+                        return !(n.startTime >= t1 - 0.01 && n.startTime <= t2 + 0.01);
+                    });
+                    // Add pedal on + off events
+                    const withPedal = [
+                        ...filtered,
+                        { isPedal: true, startTime: t1, duration: 0, vel: 127, note: -1, hand: 0 },
+                        { isPedal: true, startTime: t2, duration: 0, vel: 0, note: -1, hand: 0 },
+                    ].sort((a, b) => a.startTime - b.startTime);
+                    onUpdateNotes(withPedal);
+                }
+                pedalDrawRef.current = null;
+                return;
+            }
+
+            // Clear delete trail
+            if (interactRef.current?.type === 'deleteSwipe') {
+                interactRef.current = null;
                 setTimeout(() => { sustainTrailRef.current = []; }, 300);
                 return;
             }
@@ -315,8 +483,6 @@ export default function EditOverlay({
             }
 
             interactRef.current = null;
-            lastSustainPt.current = null;
-            setTimeout(() => { sustainTrailRef.current = []; }, 300);
         };
 
         canvas.addEventListener('touchstart', onStart, { passive: false });
@@ -367,35 +533,109 @@ export default function EditOverlay({
             ctx.globalAlpha = 1;
         }
 
+        function drawPedalRegions() {
+            if (editToolRef.current !== 'pedal') return;
+            const { noteObjs } = stateRef.current;
+            const ch = canvas.height;
+            const cw = canvas.width;
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, BAR_H, canvas.width, canvas.height - KEY_H - BAR_H);
+            ctx.clip();
+            let pedalStart = null;
+            noteObjs.forEach(n => {
+                if (!n.isPedal) return;
+                if (n.vel >= 64) {
+                    pedalStart = n.startTime;
+                } else if (pedalStart !== null) {
+                    // Draw the region
+                    const y1 = timeToY(pedalStart, ch);
+                    const y2 = timeToY(n.startTime, ch);
+                    const top = Math.min(y1, y2);
+                    const bottom = Math.max(y1, y2);
+                    const clampedTop = Math.max(BAR_H, top);
+                    const clampedBottom = Math.min(ch - KEY_H, bottom);
+                    if (clampedBottom > clampedTop) {
+                        ctx.fillStyle = 'rgba(230,57,70,0.15)';
+                        ctx.fillRect(0, clampedTop, cw, clampedBottom - clampedTop);
+                        // Two red border lines
+                        ctx.strokeStyle = 'rgba(230,57,70,0.8)';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([]);
+                        ctx.beginPath(); ctx.moveTo(0, clampedTop); ctx.lineTo(cw, clampedTop); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(0, clampedBottom); ctx.lineTo(cw, clampedBottom); ctx.stroke();
+                        const hx = cw / 2;
+                        ctx.strokeStyle = 'rgba(230,57,70,0.95)';
+                        ctx.lineWidth = 3;
+                        ctx.lineCap = 'round';
+                        ctx.beginPath(); ctx.moveTo(hx - 30, clampedTop + 8); ctx.lineTo(hx + 30, clampedTop + 8); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(hx - 30, clampedBottom - 8); ctx.lineTo(hx + 30, clampedBottom - 8); ctx.stroke();
+                        ctx.fillStyle = 'rgba(230,57,70,0.6)';
+                        ctx.font = '10px sans-serif';
+                        ctx.fillText('PEDAL', 8, clampedTop + 13);
+                        const midY = (clampedTop + clampedBottom) / 2;
+                        const midX = cw / 2;
+                        ctx.beginPath();
+                        ctx.arc(midX, midY, 14, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(230,57,70,0.25)';
+                        ctx.fill();
+                        ctx.strokeStyle = 'rgba(230,57,70,0.9)';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+
+                    }
+                    pedalStart = null;
+                }
+            });
+
+            // Draw pedal preview while dragging
+            const pd = pedalDrawRef.current;
+            ctx.restore();
+
+            if (pd) {
+                const y1 = timeToY(pd.startTime, ch);
+                const y2 = timeToY(pd.currentTime, ch);
+                const top = Math.min(y1, y2);
+                const bottom = Math.max(y1, y2);
+                ctx.fillStyle = 'rgba(230,57,70,0.12)';
+                ctx.fillRect(0, top, cw, bottom - top);
+                ctx.strokeStyle = 'rgba(230,57,70,0.9)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 3]);
+                ctx.beginPath(); ctx.moveTo(0, top); ctx.lineTo(cw, top); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, bottom); ctx.lineTo(cw, bottom); ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.fillStyle = 'rgba(230,57,70,0.7)';
+                ctx.font = '10px sans-serif';
+                ctx.fillText('PEDAL', 8, top + 13);
+            }
+        }
+
         function drawNoteIndicators() {
             const { noteObjs } = stateRef.current;
             const ch = canvas.height;
             const cw = canvas.width;
             const st = currentTime();
-
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, BAR_H, cw, ch - KEY_H - BAR_H);
+            ctx.clip();
             noteObjs.forEach(n => {
                 if (n.isPedal || n.note < MIN_NOTE || n.note > MAX_NOTE) return;
                 if (n.startTime > st + LOOK_AHEAD_VIS + 0.2) return;
                 if (n.startTime + n.duration < st - 0.5) return;
                 const r = getNoteRect(n, ch);
-                if (r.x + r.w < 0 || r.x > cw) return;
-                if (r.h < 8) return;
+                if (r.x + r.w < 0 || r.x > cw || r.h < 8) return;
 
-                const rr = Math.min(r.w * 0.35, 7);
-
-                // Top resize handle — white bar at top
+                // Top resize handle
                 ctx.fillStyle = 'rgba(255,255,255,0.55)';
-                ctx.beginPath();
-                ctx.roundRect(r.x + 4, r.y + 3, r.w - 8, 4, 2);
-                ctx.fill();
+                ctx.beginPath(); ctx.roundRect(r.x + 4, r.y + 3, r.w - 8, 4, 2); ctx.fill();
 
-                // Bottom resize handle — white bar at bottom
+                // Bottom resize handle
                 ctx.fillStyle = 'rgba(255,255,255,0.55)';
-                ctx.beginPath();
-                ctx.roundRect(r.x + 4, r.y + r.h - 7, r.w - 8, 4, 2);
-                ctx.fill();
+                ctx.beginPath(); ctx.roundRect(r.x + 4, r.y + r.h - 7, r.w - 8, 4, 2); ctx.fill();
 
-                // Middle drag indicator — dots
+                // Middle drag dots
                 if (r.h > 32) {
                     const midY = r.y + r.h / 2;
                     const midX = r.x + r.w / 2;
@@ -407,6 +647,7 @@ export default function EditOverlay({
                     });
                 }
             });
+            ctx.restore();
         }
 
         function drawAddPreview() {
@@ -430,34 +671,21 @@ export default function EditOverlay({
             ctx.strokeStyle = 'white';
             ctx.lineWidth = 2;
             ctx.setLineDash([4, 3]);
-            ctx.beginPath();
-            ctx.roundRect(r.x, r.y, r.w, Math.max(r.h, 8), rr);
-            ctx.stroke();
+            ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, Math.max(r.h, 8), rr); ctx.stroke();
             ctx.setLineDash([]);
             ctx.globalAlpha = 1;
         }
 
-        function drawSustainTrail() {
+        function drawDeleteTrail() {
             const trail = sustainTrailRef.current;
             if (trail.length < 2) return;
-            const tool = editToolRef.current;
-            const color = tool === 'sustain'
-                ? 'rgba(255,255,255,0.85)'
-                : tool === 'unsustain'
-                    ? 'rgba(255,180,50,0.85)'
-                    : 'rgba(255,60,60,0.85)';
-            const glow = tool === 'sustain'
-                ? 'rgba(255,255,255,0.5)'
-                : tool === 'unsustain'
-                    ? 'rgba(255,180,50,0.5)'
-                    : 'rgba(255,60,60,0.5)';
             ctx.save();
-            ctx.strokeStyle = color;
+            ctx.strokeStyle = 'rgba(255,60,60,0.85)';
             ctx.lineWidth = 3;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
             ctx.shadowBlur = 12;
-            ctx.shadowColor = glow;
+            ctx.shadowColor = 'rgba(255,60,60,0.5)';
             ctx.beginPath();
             trail.forEach((pt, i) => {
                 ctx.globalAlpha = (i + 1) / trail.length;
@@ -473,10 +701,11 @@ export default function EditOverlay({
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawPedalRegions();
             drawParticles();
             drawNoteIndicators();
             drawAddPreview();
-            drawSustainTrail();
+            drawDeleteTrail();
             rafRef.current = requestAnimationFrame(loop);
         }
 
@@ -515,10 +744,9 @@ export default function EditOverlay({
     };
 
     const hintText =
-        editTool === 'sustain' ? 'SWIPE NOTES TO MARK SUSTAIN' :
-            editTool === 'unsustain' ? 'SWIPE NOTES TO REMOVE SUSTAIN' :
-                editTool === 'remove' ? 'SWIPE NOTES TO DELETE' :
-                    'TAP EMPTY=ADD · ••• DRAG=MOVE · ▬ TOP/BOTTOM=RESIZE';
+        editTool === 'pedal' ? 'DRAG=DRAW · GRAB LINES=RESIZE · TAP=DELETE' :
+            editTool === 'remove' ? 'SWIPE NOTES TO DELETE' :
+                'TAP EMPTY=ADD · ••• DRAG=MOVE · ▬ TOP/BOTTOM=RESIZE';
 
     return (
         <>
@@ -535,10 +763,10 @@ export default function EditOverlay({
                 borderRadius: 12, padding: '8px 12px',
                 backdropFilter: 'blur(12px)', zIndex: 30,
                 width: 'calc(100vw - 16px)', maxWidth: 850,
-                boxSizing: 'border-box',
-                height: 64,
+                boxSizing: 'border-box', height: 64,
             }}>
 
+                {/* Hint */}
                 <div style={{
                     width: 200, minWidth: 200, flexShrink: 0,
                     color: 'rgba(255,255,255,0.3)', fontSize: 10,
@@ -548,25 +776,27 @@ export default function EditOverlay({
                     {hintText}
                 </div>
 
-                <div style={{ width: 1, height: 24, background: 'rgba(201,168,76,0.15)', flexShrink: 0 }} />
+                <div style={{ width: 1, background: 'rgba(201,168,76,0.15)', flexShrink: 0, alignSelf: 'stretch' }} />
 
+                {/* Undo / Redo */}
                 <button style={undoRedoBtn} onClick={undo} title="Undo">↩</button>
                 <button style={undoRedoBtn} onClick={redo} title="Redo">↪</button>
 
-                <div style={{ width: 1, height: 24, background: 'rgba(201,168,76,0.15)', flexShrink: 0 }} />
+                <div style={{ width: 1, background: 'rgba(201,168,76,0.15)', flexShrink: 0, alignSelf: 'stretch' }} />
 
+                {/* Tools */}
                 {[
                     { key: 'remove', label: '- DELETE' },
-                    { key: 'sustain', label: '+ SUSTAIN' },
-                    { key: 'unsustain', label: '- SUSTAIN' },
+                    { key: 'pedal', label: '🎹 PEDAL' },
                 ].map(({ key, label }) => (
                     <button key={key} style={toolBtn(key)} onClick={() => toggleTool(key)}>
                         {label}
                     </button>
                 ))}
 
-                <div style={{ width: 1, height: 24, background: 'rgba(201,168,76,0.15)', flexShrink: 0 }} />
+                <div style={{ width: 1, background: 'rgba(201,168,76,0.15)', flexShrink: 0, alignSelf: 'stretch' }} />
 
+                {/* Done */}
                 <button
                     style={{
                         width: 70, minWidth: 70, flexShrink: 0,
