@@ -297,6 +297,8 @@ export default function App() {
                 onLoadSong={loadSong}
                 zoom={zoom}
                 onZoomChange={handleZoomChange}
+                keyZoom={keyZoom}
+                onKeyZoomChange={setKeyZoom}
                 fullPedal={fullPedal}
                 onToggleFullPedal={() => setFullPedal(f => !f)}
                 rightColor={rightColor}

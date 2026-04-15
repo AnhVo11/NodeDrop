@@ -45,7 +45,6 @@ export function parseMidi(buffer) {
             let sb = d[p];
             if (sb & 0x80) { last = sb; p++; } else { sb = last; }
             const type = sb & 0xf0;
-            const ch = sb & 0x0f;
 
             if (type === 0x90) {
                 const note = d[p++], vel = d[p++];

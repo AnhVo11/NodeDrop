@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { noteX, noteW, getTotalWhites, isBlack } from './PianoKeys';
 import { useEditHistory } from '../hooks/useEditHistory';
-
+import { ArrowCounterclockwise, ArrowClockwise } from 'react-bootstrap-icons';
 const MIN_NOTE = 21;
 const MAX_NOTE = 108;
 const KEY_H = 130;
@@ -772,7 +772,7 @@ export default function EditOverlay({
         border: '1px solid rgba(201,168,76,0.25)',
         color: 'rgba(201,168,76,0.9)',
         padding: 0, borderRadius: 6, cursor: 'pointer',
-        fontSize: 14, fontFamily: 'inherit',
+        fontSize: 18, fontFamily: 'inherit',
         WebkitTapHighlightColor: 'transparent', textAlign: 'center',
         alignSelf: 'stretch',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -797,7 +797,7 @@ export default function EditOverlay({
                 border: '1px solid rgba(201,168,76,0.2)',
                 borderRadius: 12, padding: '8px 12px',
                 backdropFilter: 'blur(12px)', zIndex: 50,
-                width: 'calc(100vw - 16px)', maxWidth: 850,
+                width: 'calc(100vw - 16px)', maxWidth: 720,
                 boxSizing: 'border-box', height: 64,
             }}>
 
@@ -814,8 +814,8 @@ export default function EditOverlay({
                 <div style={{ width: 1, background: 'rgba(201,168,76,0.15)', flexShrink: 0, alignSelf: 'stretch' }} />
 
                 {/* Undo / Redo */}
-                <button style={undoRedoBtn} onClick={undo} title="Undo"><i className="bi bi-arrow-counterclockwise" /></button>
-                <button style={undoRedoBtn} onClick={redo} title="Redo"><i className="bi bi-arrow-clockwise" /></button>
+                <button style={undoRedoBtn} onClick={undo} title="Undo"><ArrowCounterclockwise /></button>
+                <button style={undoRedoBtn} onClick={redo} title="Redo"><ArrowClockwise /></button>
 
                 <div style={{ width: 1, background: 'rgba(201,168,76,0.15)', flexShrink: 0, alignSelf: 'stretch' }} />
 

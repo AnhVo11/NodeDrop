@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { SkipStart, Play, Pause, Infinity, Gear, Book, CloudArrowDown, Pencil, HandIndex, MusicNote } from 'react-bootstrap-icons';
 
 const styles = {
     bar: {
@@ -20,7 +21,7 @@ const styles = {
         border: '1px solid rgba(201,168,76,0.35)',
         color: '#c9a84c', borderRadius: '50%',
         cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        width: 36, height: 36, fontSize: 14,
+        width: 36, height: 36, fontSize: 18,
         WebkitTapHighlightColor: 'transparent',
     },
     btnLarge: {
@@ -28,7 +29,7 @@ const styles = {
         border: '1.5px solid rgba(201,168,76,0.35)',
         color: '#c9a84c', borderRadius: '50%',
         cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        width: 44, height: 44, fontSize: 16,
+        width: 44, height: 44, fontSize: 22,
         WebkitTapHighlightColor: 'transparent',
     },
     textBtn: {
@@ -89,7 +90,7 @@ function HandColorButton({ rightColor, onRightColorChange, leftColor, onLeftColo
     }, []);
     return (
         <div style={styles.handWrap} ref={ref}>
-            <button style={styles.btn} onClick={() => setOpen(o => !o)} title="Hand Colors"><i className="bi bi-hand-index" /></button>
+            <button style={styles.btn} onClick={() => setOpen(o => !o)} title="Hand Colors"><HandIndex /></button>
             {open && (
                 <div style={{
                     position: 'absolute', top: 44, right: 0,
@@ -147,7 +148,7 @@ function HandColorButton({ rightColor, onRightColorChange, leftColor, onLeftColo
 
 export default function TopBar({
     isPlaying, onPlayPause, onRestart, onMidiLoad, onLoadSong,
-    tempo, onTempoChange, zoom, onZoomChange,
+    tempo, onTempoChange, zoom, onZoomChange, keyZoom, onKeyZoomChange,
     fullPedal, onToggleFullPedal,
     rightColor, onRightColorChange,
     leftColor, onLeftColorChange,
@@ -158,8 +159,10 @@ export default function TopBar({
     editMode,
 }) {
     const [gearOpen, setGearOpen] = useState(false);
+    const [libraryOpen, setLibraryOpen] = useState(false);
     const [speedActive, setSpeedActive] = useState(false);
     const gearRef = useRef(null);
+    const libraryRef = useRef(null);
     const speedDisplay = (tempo / 100).toFixed(1);
 
     // Close gear when clicking outside
@@ -173,6 +176,14 @@ export default function TopBar({
         return () => document.removeEventListener('pointerdown', handler);
     }, []);
 
+    useEffect(() => {
+        const handler = (e) => {
+            if (libraryRef.current && !libraryRef.current.contains(e.target)) setLibraryOpen(false);
+        };
+        document.addEventListener('pointerdown', handler);
+        return () => document.removeEventListener('pointerdown', handler);
+    }, []);
+
     return (
         <>
             <div style={styles.bar}>
@@ -180,9 +191,9 @@ export default function TopBar({
 
                 {/* Center — go to start + play/pause + loop */}
                 <div style={styles.center}>
-                    <button style={styles.btn} onClick={onRestart} title="Go to beginning"><i className="bi bi-skip-start" /></button>
+                    <button style={styles.btn} onClick={onRestart} title="Go to beginning"><SkipStart /></button>
                     <button style={styles.btnLarge} onClick={onPlayPause}>
-                        {isPlaying ? <i className="bi bi-pause" /> : <i className="bi bi-play" />}
+                        {isPlaying ? <Pause /> : <Play />}
                     </button>
                     <button
                         style={{
@@ -193,7 +204,7 @@ export default function TopBar({
                         }}
                         onClick={onToggleLoop}
                         title="Loop"
-                    ><i className="bi bi-infinity" /></button>
+                    ><Infinity /></button>
                 </div>
 
                 <div style={styles.controls}>
@@ -224,6 +235,35 @@ export default function TopBar({
 
                     <div style={styles.divider} />
 
+                    {/* Library button */}
+                    <div style={styles.gearWrap} ref={libraryRef}>
+                        <button
+                            style={{
+                                ...styles.btn,
+                                background: libraryOpen ? 'rgba(201,168,76,0.15)' : 'transparent',
+                            }}
+                            onClick={() => setLibraryOpen(o => !o)}
+                        >
+                            <Book />
+                        </button>
+                        {libraryOpen && (
+                            <div style={styles.dropdown}>
+                                <button style={styles.dropItem}
+                                    onClick={() => { onLoadSong('chopin'); setLibraryOpen(false); }}>
+                                    <MusicNote /> Chopin
+                                </button>
+                                <button style={styles.dropItem}
+                                    onClick={() => { onLoadSong('river'); setLibraryOpen(false); }}>
+                                    <MusicNote /> River Flows in You
+                                </button>
+                                <button style={styles.dropItem}
+                                    onClick={() => { onLoadSong('kiss'); setLibraryOpen(false); }}>
+                                    <MusicNote /> Kiss the Rain
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
                     {/* Gear button */}
                     <div style={styles.gearWrap} ref={gearRef}>
                         <button
@@ -233,35 +273,36 @@ export default function TopBar({
                             }}
                             onClick={() => setGearOpen(o => !o)}
                         >
-                            <i className="bi bi-gear" />
+                            <Gear />
                         </button>
 
                         {gearOpen && (
                             <div style={styles.dropdown}>
-                                {/* Default Songs */}
-                                <button
-                                    style={styles.dropItem}
-                                    onClick={() => { onLoadSong('chopin'); setGearOpen(false); }}
-                                >
-                                    <span>🎹</span> Chopin
-                                </button>
-
-                                <button
-                                    style={styles.dropItem}
-                                    onClick={() => { onLoadSong('river'); setGearOpen(false); }}
-                                >
-                                    <span>🎹</span> River Flows in You
-                                </button>
-                                <button
-                                    style={styles.dropItem}
-                                    onClick={() => { onLoadSong('kiss'); setGearOpen(false); }}
-                                >
-                                    <span>🎹</span> Kiss the Rain
-                                </button>
+                                {/* View zoom */}
+                                <div style={{ padding: '8px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span style={styles.lbl}>VIEW</span>
+                                            <span style={styles.val}>{zoom}%</span>
+                                        </div>
+                                        <input type="range" min="100" max="400" value={zoom}
+                                            onChange={e => onZoomChange(parseInt(e.target.value))}
+                                            style={{ width: '100%', height: 2, accentColor: '#c9a84c' }} />
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span style={styles.lbl}>KEYS</span>
+                                            <span style={styles.val}>{keyZoom}%</span>
+                                        </div>
+                                        <input type="range" min="100" max="400" value={keyZoom}
+                                            onChange={e => onKeyZoomChange(parseInt(e.target.value))}
+                                            style={{ width: '100%', height: 2, accentColor: '#c9a84c' }} />
+                                    </div>
+                                </div>
                                 <div style={styles.dropDivider} />
                                 {/* Load MIDI */}
                                 <label style={styles.dropItem} htmlFor="midi-input">
-                                    <i className="bi bi-cloud-arrow-down" /> Load MIDI
+                                    <CloudArrowDown /> Load MIDI
                                 </label>
                                 <input id="midi-input" type="file" accept=".mid,.midi"
                                     style={styles.fileInput}
@@ -272,7 +313,7 @@ export default function TopBar({
                                 {/* Edit Song */}
                                 <button style={styles.dropItem}
                                     onClick={() => { onEnterEdit(); setGearOpen(false); }}>
-                                    <i className="bi bi-pencil" /> Edit Song
+                                    <Pencil /> Edit Song
                                 </button>
                             </div>
                         )}
