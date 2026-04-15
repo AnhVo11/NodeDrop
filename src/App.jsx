@@ -3,6 +3,7 @@ import TopBar from './components/TopBar';
 import PianoCanvas from './components/PianoCanvas';
 import { useAudio } from './hooks/useAudio';
 import { parseMidi } from './hooks/useMidi';
+import { exportMidi } from './hooks/useExportMidi';
 
 
 const MIN_NOTE = 21;
@@ -28,6 +29,8 @@ export default function App() {
     const [activeKeys, setActiveKeys] = useState(new Map());
     const [editMode, setEditMode] = useState(false);
     const [loop, setLoop] = useState(false);
+    const [savePrompt, setSavePrompt] = useState(false);
+    const [editSongTitle, setEditSongTitle] = useState('');
     const [hiddenHands, setHiddenHands] = useState({ 0: false, 1: false });
     const [keyZoom, setKeyZoom] = useState(100);
 
@@ -163,7 +166,7 @@ export default function App() {
         setTempoScale(val / 100);
     }, [isPlaying, getCtx, getCurrentTime]);
 
-    const handleZoomChange = useCallback(val => { setZoom(val); }, []);
+    const handleZoomChange = useCallback(val => { setZoom(Math.max(1, val)); }, []);
 
     const handleScrub = useCallback((newTime) => {
         const aCtx = getCtx();
@@ -217,6 +220,21 @@ export default function App() {
     }, []);
 
     // ---- Edit mode ----
+    const handleCreateSong = useCallback(() => {
+        const empty = [];
+        setSong(empty);
+        setNoteObjs([]);
+        setSongTitle('New Song');
+        setIsPlaying(false);
+        setPlayOffset(0);
+        setPlayStart(0);
+        setScheduled(new Set());
+        setActiveKeys(new Map());
+        setRightColor('#c9a84c');
+        setLeftColor('#e63946');
+        setEditMode(true);
+    }, []);
+
     const handleEnterEdit = useCallback(() => {
         if (isPlaying) {
             setPlayOffset(getCurrentTime());
@@ -227,8 +245,9 @@ export default function App() {
     }, [isPlaying, getCurrentTime]);
 
     const handleExitEdit = useCallback(() => {
-        setEditMode(false);
-    }, []);
+        setEditSongTitle(songTitle);
+        setSavePrompt(true);
+    }, [songTitle]);
 
     const handleAddNote = useCallback((newNote) => {
         setSong(prev => {
@@ -306,6 +325,8 @@ export default function App() {
                 leftColor={leftColor}
                 onLeftColorChange={setLeftColor}
                 onEnterEdit={handleEnterEdit}
+                onCreateSong={handleCreateSong}
+                onSave={() => exportMidi(song, songTitle)}
                 songTitle={songTitle.toUpperCase()}
                 editMode={editMode}
                 loop={loop}
@@ -313,6 +334,92 @@ export default function App() {
                 hiddenHands={hiddenHands}
                 onToggleHideHand={(hand) => setHiddenHands(h => ({ ...h, [hand]: !h[hand] }))}
             />
+            {savePrompt && (
+                <div style={{
+                    position: 'fixed', inset: 0, zIndex: 200,
+                    background: 'rgba(0,0,0,0.7)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                    <div style={{
+                        background: '#12121c', border: '1px solid rgba(201,168,76,0.3)',
+                        borderRadius: 12, padding: 28, minWidth: 300,
+                        display: 'flex', flexDirection: 'column', gap: 16,
+                        boxShadow: '0 16px 48px rgba(0,0,0,0.8)',
+                    }}>
+                        <div style={{ color: '#c9a84c', fontSize: 12, letterSpacing: 3, textTransform: 'uppercase' }}>
+                            Save Song
+                        </div>
+                        <input
+                            value={editSongTitle}
+                            onChange={e => setEditSongTitle(e.target.value)}
+                            placeholder="Song name..."
+                            style={{
+                                background: 'rgba(255,255,255,0.05)',
+                                border: '1px solid rgba(201,168,76,0.3)',
+                                borderRadius: 6, padding: '10px 14px',
+                                color: 'white', fontSize: 13, letterSpacing: 2,
+                                outline: 'none', fontFamily: 'inherit',
+                            }}
+                        />
+                        <div style={{ display: 'flex', gap: 10 }}>
+                            <button
+                                onClick={() => {
+                                    const name = editSongTitle.trim() || 'New Song';
+                                    setSongTitle(name);
+                                    exportMidi(song, name);
+                                    setSavePrompt(false);
+                                    setEditMode(false);
+                                }}
+                                style={{
+                                    flex: 1, padding: '10px 0',
+                                    background: 'rgba(201,168,76,0.15)',
+                                    border: '1px solid rgba(201,168,76,0.6)',
+                                    color: '#c9a84c', borderRadius: 6,
+                                    cursor: 'pointer', fontSize: 11,
+                                    letterSpacing: 2, textTransform: 'uppercase',
+                                    fontFamily: 'inherit',
+                                }}
+                            >
+                                Save & Exit
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const name = editSongTitle.trim() || 'New Song';
+                                    setSongTitle(name);
+                                    setSavePrompt(false);
+                                    setEditMode(false);
+                                }}
+                                style={{
+                                    flex: 1, padding: '10px 0',
+                                    background: 'transparent',
+                                    border: '1px solid rgba(255,255,255,0.15)',
+                                    color: 'rgba(255,255,255,0.5)', borderRadius: 6,
+                                    cursor: 'pointer', fontSize: 11,
+                                    letterSpacing: 2, textTransform: 'uppercase',
+                                    fontFamily: 'inherit',
+                                }}
+                            >
+                                Exit Only
+                            </button>
+                            <button
+                                onClick={() => setSavePrompt(false)}
+                                style={{
+                                    padding: '10px 16px',
+                                    background: 'transparent',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    color: 'rgba(255,255,255,0.3)', borderRadius: 6,
+                                    cursor: 'pointer', fontSize: 11,
+                                    letterSpacing: 2, textTransform: 'uppercase',
+                                    fontFamily: 'inherit',
+                                }}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {!isPlaying && !editMode && (
                 <div style={{
                     position: 'fixed', top: '50%', left: '50%',

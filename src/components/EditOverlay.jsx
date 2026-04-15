@@ -225,10 +225,11 @@ export default function EditOverlay({
             const { x, y } = getXY(e);
             const ch = canvas.height;
             const tool = editToolRef.current;
-            const barY = ch - KEY_H - 6;
-
-            // Progress bar seek
-            if (y >= barY - 16 && y <= barY + 22) {
+            const barY = BAR_H;
+            const prog = Math.min(1, Math.max(0, currentTime() / songDuration));
+            const dotX = Math.max(8, canvas.width * prog);
+            const nearDot = Math.abs(x - dotX) <= 20 && y >= barY - 8 && y <= barY + 14;
+            if (nearDot) {
                 editScrubRef.current = { startX: x, startTime: currentTime(), isBar: true };
                 return;
             }
@@ -309,6 +310,7 @@ export default function EditOverlay({
                             note: midiNote,
                             startTime: yToSongTime(y, ch),
                             startY: y, currentY: y,
+                            hand: paintHandRef.current !== null ? paintHandRef.current : 0,
                         },
                     };
                 }
@@ -506,12 +508,13 @@ export default function EditOverlay({
                 const startTime = yToSongTime(bottomY, ch);
                 const endTime = yToSongTime(topY, ch);
                 pushUndo(stateRef.current.noteObjs);
+                const hand = paintHandRef.current !== null ? paintHandRef.current : 0;
                 onAddNote({
                     note: prev.note,
                     startTime: Math.max(0, startTime),
                     duration: Math.max(0.1, endTime - startTime),
                     vel: 0.7,
-                    hand: prev.note >= 60 ? 0 : 1,
+                    hand,
                     sustain: false,
                 });
             }
@@ -693,7 +696,7 @@ export default function EditOverlay({
                 note: prev.note,
                 startTime: Math.max(0, startTime),
                 duration: Math.max(0.1, endTime - startTime),
-                hand: prev.note >= 60 ? 0 : 1,
+                hand: prev.hand ?? 0,
             };
             const r = getNoteRect(pNote, ch);
             const rr = Math.min(r.w * 0.35, 7);

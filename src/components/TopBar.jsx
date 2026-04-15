@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SkipStart, Play, Pause, Infinity, Gear, Book, CloudArrowDown, Pencil, HandIndex, MusicNote } from 'react-bootstrap-icons';
+import { SkipStart, Play, Pause, Infinity, Gear, Book, CloudArrowDown, Pencil, HandIndex, MusicNote, FileMusic } from 'react-bootstrap-icons';
 
 const styles = {
     bar: {
@@ -152,7 +152,7 @@ export default function TopBar({
     fullPedal, onToggleFullPedal,
     rightColor, onRightColorChange,
     leftColor, onLeftColorChange,
-    onEnterEdit,
+    onEnterEdit, onCreateSong, onSave,
     songTitle,
     loop, onToggleLoop,
     hiddenHands, onToggleHideHand,
@@ -235,6 +235,11 @@ export default function TopBar({
 
                     <div style={styles.divider} />
 
+                    {/* Create Song button */}
+                    <button style={styles.btn} onClick={onCreateSong} title="Create Song">
+                        <FileMusic />
+                    </button>
+
                     {/* Library button */}
                     <div style={styles.gearWrap} ref={libraryRef}>
                         <button
@@ -285,7 +290,7 @@ export default function TopBar({
                                             <span style={styles.lbl}>VIEW</span>
                                             <span style={styles.val}>{zoom}%</span>
                                         </div>
-                                        <input type="range" min="100" max="400" value={zoom}
+                                        <input type="range" min="1" max="300" value={zoom}
                                             onChange={e => onZoomChange(parseInt(e.target.value))}
                                             style={{ width: '100%', height: 2, accentColor: '#c9a84c' }} />
                                     </div>
@@ -294,7 +299,7 @@ export default function TopBar({
                                             <span style={styles.lbl}>KEYS</span>
                                             <span style={styles.val}>{keyZoom}%</span>
                                         </div>
-                                        <input type="range" min="100" max="400" value={keyZoom}
+                                        <input type="range" min="100" max="200" value={keyZoom}
                                             onChange={e => onKeyZoomChange(parseInt(e.target.value))}
                                             style={{ width: '100%', height: 2, accentColor: '#c9a84c' }} />
                                     </div>
@@ -315,6 +320,16 @@ export default function TopBar({
                                     onClick={() => { onEnterEdit(); setGearOpen(false); }}>
                                     <Pencil /> Edit Song
                                 </button>
+
+                                {/* Save MIDI */}
+                                <button style={styles.dropItem}
+                                    onClick={() => { onSave(); setGearOpen(false); }}>
+                                    <FileMusic /> Save MIDI
+                                </button>
+
+                                <div style={styles.dropDivider} />
+
+
                             </div>
                         )}
                     </div>

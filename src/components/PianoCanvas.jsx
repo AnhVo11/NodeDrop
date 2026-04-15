@@ -37,7 +37,7 @@ export default function PianoCanvas({
 
     const pinchRef = useRef(null); // { initDist: {h, v}, initZoom: {key, view} }
     const stateRef = useRef({});
-    const lookAhead = 4.5 + (zoom - 100) / 300 * Math.max(0, songDuration - 4.5);
+    const lookAhead = 4.5 * (100 / zoom);
     stateRef.current = {
         noteObjs, isPlaying, playOffset, playStart,
         tempoScale, scheduled, activeKeys, zoom,
@@ -165,12 +165,12 @@ export default function PianoCanvas({
             if (p.direction === 'h') {
                 const hScale = curH / Math.max(p.initH, 1);
                 const dampened = 1 + (hScale - 1) * 0.3;
-                const newKey = Math.min(400, Math.max(100, p.initKeyZoom * dampened));
+                const newKey = Math.min(200, Math.max(1, p.initKeyZoom * dampened));
                 onKeyZoomChange(Math.round(newKey));
             } else {
                 const vScale = Math.max(p.initV, 1) / curV;
                 const dampened = 1 + (vScale - 1) * 0.3;
-                const newView = Math.min(400, Math.max(100, p.initViewZoom * dampened));
+                const newView = Math.min(200, Math.max(1, p.initViewZoom * dampened));
                 onZoomChange(Math.round(newView));
             }
         };
