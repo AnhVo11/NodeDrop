@@ -153,7 +153,7 @@ export default function TopBar({
     rightColor, onRightColorChange,
     leftColor, onLeftColorChange,
     onEnterEdit, onCreateSong, onSave,
-    songTitle,
+    songTitle, isCreateMode,
     loop, onToggleLoop,
     hiddenHands, onToggleHideHand,
     editMode,
@@ -316,10 +316,12 @@ export default function TopBar({
                                 <div style={styles.dropDivider} />
 
                                 {/* Edit Song */}
-                                <button style={styles.dropItem}
-                                    onClick={() => { onEnterEdit(); setGearOpen(false); }}>
-                                    <Pencil /> Edit Song
-                                </button>
+                                {!isCreateMode && (
+                                    <button style={styles.dropItem}
+                                        onClick={() => { onEnterEdit(); setGearOpen(false); }}>
+                                        <Pencil /> Edit Song
+                                    </button>
+                                )}
 
                                 {/* Save MIDI */}
                                 <button style={styles.dropItem}

@@ -28,6 +28,7 @@ export default function App() {
     const [scheduled, setScheduled] = useState(new Set());
     const [activeKeys, setActiveKeys] = useState(new Map());
     const [editMode, setEditMode] = useState(false);
+    const [isCreateMode, setIsCreateMode] = useState(false);
     const [loop, setLoop] = useState(false);
     const [savePrompt, setSavePrompt] = useState(false);
     const [editSongTitle, setEditSongTitle] = useState('');
@@ -61,6 +62,8 @@ export default function App() {
     };
 
     async function loadSong(key) {
+        setIsCreateMode(false);
+        setEditMode(false);
         try {
             const { file, title } = SONGS[key];
             const res = await fetch(file);
@@ -232,6 +235,7 @@ export default function App() {
         setActiveKeys(new Map());
         setRightColor('#c9a84c');
         setLeftColor('#e63946');
+        setIsCreateMode(true);
         setEditMode(true);
     }, []);
 
@@ -245,9 +249,13 @@ export default function App() {
     }, [isPlaying, getCurrentTime]);
 
     const handleExitEdit = useCallback(() => {
-        setEditSongTitle(songTitle);
-        setSavePrompt(true);
-    }, [songTitle]);
+        if (isCreateMode) {
+            setEditSongTitle(songTitle);
+            setSavePrompt(true);
+        } else {
+            setEditMode(false);
+        }
+    }, [isCreateMode, songTitle]);
 
     const handleAddNote = useCallback((newNote) => {
         setSong(prev => {
@@ -302,6 +310,7 @@ export default function App() {
                 leftColor={leftColor}
                 songDuration={songDuration}
                 editMode={editMode}
+                isCreateMode={isCreateMode}
                 onExitEdit={handleExitEdit}
                 onAddNote={handleAddNote}
                 onUpdateNotes={handleUpdateNotes}
@@ -324,9 +333,10 @@ export default function App() {
                 onRightColorChange={setRightColor}
                 leftColor={leftColor}
                 onLeftColorChange={setLeftColor}
+                isCreateMode={isCreateMode}
                 onEnterEdit={handleEnterEdit}
                 onCreateSong={handleCreateSong}
-                onSave={() => exportMidi(song, songTitle)}
+                onSave={() => { setEditSongTitle(songTitle); setSavePrompt(true); }}
                 songTitle={songTitle.toUpperCase()}
                 editMode={editMode}
                 loop={loop}
@@ -369,6 +379,7 @@ export default function App() {
                                     exportMidi(song, name);
                                     setSavePrompt(false);
                                     setEditMode(false);
+                                    setIsCreateMode(false);
                                 }}
                                 style={{
                                     flex: 1, padding: '10px 0',
@@ -388,6 +399,7 @@ export default function App() {
                                     setSongTitle(name);
                                     setSavePrompt(false);
                                     setEditMode(false);
+                                    setIsCreateMode(false);
                                 }}
                                 style={{
                                     flex: 1, padding: '10px 0',
@@ -402,7 +414,7 @@ export default function App() {
                                 Exit Only
                             </button>
                             <button
-                                onClick={() => setSavePrompt(false)}
+                                onClick={() => { setSavePrompt(false); }}
                                 style={{
                                     padding: '10px 16px',
                                     background: 'transparent',

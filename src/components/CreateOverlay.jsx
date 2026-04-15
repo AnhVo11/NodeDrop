@@ -788,7 +788,7 @@ export default function EditOverlay({
             editTool === 'remove' ? 'SWIPE NOTES TO DELETE' :
                 editTool === 'paint' ? 'SWIPE NOTES TO REPAINT HAND' :
                     editTool === 'addNode' ? 'TAP EMPTY=ADD · ••• DRAG=MOVE · ▬ TOP/BOTTOM=RESIZE' :
-                        'EDIT SONG MODE';
+                        'CREATE SONG MODE';
 
     return (
         <>
@@ -804,13 +804,12 @@ export default function EditOverlay({
                 border: '1px solid rgba(201,168,76,0.2)',
                 borderRadius: 12, padding: '8px 12px',
                 backdropFilter: 'blur(12px)', zIndex: 50,
-                width: 'calc(100vw - 16px)', maxWidth: 810,
+                width: 'calc(100vw - 16px)', maxWidth: 1000,
                 boxSizing: 'border-box', height: 64,
             }}>
-
                 {/* Hint */}
                 <div style={{
-                    width: 200, minWidth: 200, flexShrink: 0,
+                    width: 160, minWidth: 160, flexShrink: 0,
                     color: 'rgba(255,255,255,0.7)', fontSize: 10,
                     letterSpacing: 1.5, textTransform: 'uppercase', lineHeight: 1.5,
                     display: 'flex', alignItems: 'center',
@@ -826,20 +825,35 @@ export default function EditOverlay({
 
                 <div style={{ width: 1, background: 'rgba(201,168,76,0.15)', flexShrink: 0, alignSelf: 'stretch' }} />
 
-                {/* Tools */}
-                {[
-                    { key: 'addNode', label: '+ NODE' },
-                    { key: 'remove', label: '- DELETE' },
-                    { key: 'pedal', label: 'SUSTAIN' },
-                ].map(({ key, label }) => (
-                    <button key={key} style={toolBtn(key)} onClick={() => toggleTool(key)}>
-                        {label}
-                    </button>
-                ))}
+                {/* + Node */}
+                <button style={toolBtn('addNode')} onClick={() => toggleTool('addNode')}>
+                    + NODE
+                </button>
+
+                {/* Delete */}
+                <button style={toolBtn('remove')} onClick={() => toggleTool('remove')}>
+                    - DELETE
+                </button>
+
+                {/* Sustain draw */}
+                <button style={toolBtn('pedal')} onClick={() => toggleTool('pedal')}>
+                    SUSTAIN
+                </button>
 
                 <div style={{ width: 1, background: 'rgba(201,168,76,0.15)', flexShrink: 0, alignSelf: 'stretch' }} />
 
-                {/* L / R hand paint buttons */}
+
+                {/* Smart */}
+                <button
+                    style={{ ...toolBtn(null), width: 70, minWidth: 70, opacity: 0.4 }}
+                    disabled
+                >
+                    SMART
+                </button>
+
+                <div style={{ width: 1, background: 'rgba(201,168,76,0.15)', flexShrink: 0, alignSelf: 'stretch' }} />
+
+                {/* L / R hand paint */}
                 {[
                     { hand: 1, label: 'L', color: leftColor },
                     { hand: 0, label: 'R', color: rightColor },
@@ -867,15 +881,14 @@ export default function EditOverlay({
                             }
                         }}
                     >
-                        <div style={{
-                            width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0,
-                        }} />
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
                         {label}
                     </button>
                 ))}
 
                 <div style={{ width: 1, background: 'rgba(201,168,76,0.15)', flexShrink: 0, alignSelf: 'stretch' }} />
-                {/* Done */}
+
+                {/* Save */}
                 <button
                     style={{
                         width: 70, minWidth: 70, flexShrink: 0,
@@ -890,7 +903,7 @@ export default function EditOverlay({
                     }}
                     onClick={onExitEdit}
                 >
-                    {isCreateMode ? 'SAVE' : '✓ DONE'}
+                    SAVE
                 </button>
             </div>
         </>

@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { isBlack, noteX, noteW, getTotalWhites } from './PianoKeys';
 import EditOverlay from './EditOverlay';
+import CreateOverlay from './CreateOverlay';
 
 const MIN_NOTE = 21;
 const MAX_NOTE = 108;
@@ -21,7 +22,7 @@ export default function PianoCanvas({
     onZoomChange, keyZoom, onKeyZoomChange,
     rightColor, leftColor,
     songDuration,
-    editMode, onExitEdit, onAddNote, onUpdateNotes,
+    editMode, isCreateMode, onExitEdit, onAddNote, onUpdateNotes,
 }) {
     const canvasRef = useRef(null);
     const rafRef = useRef(null);
@@ -37,7 +38,7 @@ export default function PianoCanvas({
 
     const pinchRef = useRef(null); // { initDist: {h, v}, initZoom: {key, view} }
     const stateRef = useRef({});
-    const lookAhead = 4.5 * (100 / zoom);
+    const lookAhead = Math.min(4.5 * (100 / zoom), Math.max(songDuration, 4.5));
     stateRef.current = {
         noteObjs, isPlaying, playOffset, playStart,
         tempoScale, scheduled, activeKeys, zoom,
@@ -259,11 +260,22 @@ export default function PianoCanvas({
         ctx.rect(0, BAR_H, cw, ch - KEY_H - BAR_H);
         ctx.clip();
 
-        noteObjs.forEach(n => {
-            if (n.isPedal || n.note < MIN_NOTE || n.note > MAX_NOTE) return;
-            if (!editMode && hiddenHands[n.hand]) return;
-            if (n.startTime > st + stateRef.current.lookAhead + 0.2) return;
-            if (n.startTime + n.duration < st - 0.5) return;
+        const la = stateRef.current.lookAhead;
+        const visStart = st - 0.5;
+        const visEnd = st + la + 0.2;
+        let startIdx = 0;
+        let lo = 0, hi = noteObjs.length - 1;
+        while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            if (noteObjs[mid].startTime + noteObjs[mid].duration < visStart) { lo = mid + 1; startIdx = lo; }
+            else hi = mid - 1;
+        }
+        for (let ni = startIdx; ni < noteObjs.length; ni++) {
+            const n = noteObjs[ni];
+            if (n.startTime > visEnd) break;
+            if (n.isPedal || n.note < MIN_NOTE || n.note > MAX_NOTE) continue;
+            if (!editMode && hiddenHands[n.hand]) continue;
+            if (n.startTime + n.duration < visStart) continue;
 
             const r = getNoteRect(n, ch);
             if (r.x + r.w < 0 || r.x > cw) return;
@@ -272,12 +284,8 @@ export default function PianoCanvas({
             const past = st - (n.startTime + n.duration);
             ctx.globalAlpha = past > 0 ? Math.max(0.15, 1 - past * 2) : 1;
 
-            ctx.shadowBlur = 14;
-            ctx.shadowColor = fillC + '88';
             ctx.fillStyle = fillC;
             ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, rr); ctx.fill();
-
-            ctx.shadowBlur = 0;
             ctx.fillStyle = 'rgba(255,255,255,0.4)';
             ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, Math.min(4, r.h), [rr, rr, 0, 0]); ctx.fill();
 
@@ -304,11 +312,12 @@ export default function PianoCanvas({
             }
 
             ctx.globalAlpha = 1;
-        });
+        }
 
         ctx.shadowBlur = 0;
         ctx.restore();
-    }, [currentTime, getNoteRect, hiddenHands]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentTime, getNoteRect]);
 
     // ---- Draw Piano Keys ----
     const drawPianoKeys = useCallback((ctx, cw, ch) => {
@@ -339,10 +348,8 @@ export default function PianoCanvas({
                 ctx.fillStyle = color ?? '#e8e3d4';
                 ctx.fillRect(x + 1, ky + 2, ww - 2, KEY_H - 4);
                 if (color) {
-                    ctx.shadowBlur = 18; ctx.shadowColor = color;
                     ctx.fillStyle = color;
                     ctx.fillRect(x + 1, ky + KEY_H - 28, ww - 2, 26);
-                    ctx.shadowBlur = 0;
                 }
                 ctx.fillStyle = 'rgba(0,0,0,0.18)';
                 ctx.fillRect(x, ky + 2, 1, KEY_H - 4);
@@ -360,10 +367,8 @@ export default function PianoCanvas({
                 ctx.fillStyle = color ?? '#161622';
                 ctx.beginPath(); ctx.roundRect(x - bw / 2, ky + 2, bw, bh, [0, 0, 5, 5]); ctx.fill();
                 if (color) {
-                    ctx.shadowBlur = 12; ctx.shadowColor = color;
                     ctx.fillStyle = color;
                     ctx.fillRect(x - bw / 2 + 2, ky + bh - 14, bw - 4, 12);
-                    ctx.shadowBlur = 0;
                 }
             }
         }
@@ -382,10 +387,7 @@ export default function PianoCanvas({
         const dotX = Math.max(8, cw * prog);
         ctx.beginPath(); ctx.arc(dotX, barY + 3, 9, 0, Math.PI * 2);
         ctx.fillStyle = '#e63946';
-        ctx.shadowBlur = 12;
-        ctx.shadowColor = '#e63946';
         ctx.fill();
-        ctx.shadowBlur = 0;
 
         const targetSize = isSeekingBar.current ? 75 : 15;
         fontSizeRef.current += (targetSize - fontSizeRef.current) * 0.15;
@@ -469,7 +471,7 @@ export default function PianoCanvas({
             </div>
 
             {/* Edit overlay */}
-            {editMode && (
+            {editMode && !isCreateMode && (
                 <EditOverlay
                     canvasRef={canvasRef}
                     noteObjs={noteObjs}
@@ -484,6 +486,24 @@ export default function PianoCanvas({
                     onScrub={onScrub}
                     songDuration={songDuration}
                     lookAhead={stateRef.current.lookAhead}
+                />
+            )}
+            {editMode && isCreateMode && (
+                <CreateOverlay
+                    canvasRef={canvasRef}
+                    noteObjs={noteObjs}
+                    onAddNote={onAddNote}
+                    onUpdateNotes={onUpdateNotes}
+                    onExitEdit={onExitEdit}
+                    currentTime={currentTime}
+                    getPianoWidth={getPianoWidth}
+                    scrollX={scrollX}
+                    rightColor={rightColor}
+                    leftColor={leftColor}
+                    onScrub={onScrub}
+                    songDuration={songDuration}
+                    lookAhead={stateRef.current.lookAhead}
+                    isCreateMode={isCreateMode}
                 />
             )}
         </div>
