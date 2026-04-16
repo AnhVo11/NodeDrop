@@ -8,7 +8,7 @@ const KEY_H = 130;
 const BAR_H = 56;
 const HANDLE_SIZE = 16;
 
-export default function EditOverlay({
+export default function CreateOverlay({
     canvasRef,
     noteObjs,
     onAddNote,
@@ -23,6 +23,7 @@ export default function EditOverlay({
     songDuration,
     lookAhead,
     isCreateMode,
+    onSmartCapture,
 }) {
     const [editTool, setEditTool] = useState(null);
     const [paintHand, setPaintHand] = useState(null); // null=off, 0=right, 1=left
@@ -647,6 +648,7 @@ export default function EditOverlay({
         }
 
         function drawNoteIndicators() {
+            if (editToolRef.current !== 'addNode') return;
             const { noteObjs } = stateRef.current;
             const ch = canvas.height;
             const cw = canvas.width;
@@ -845,8 +847,8 @@ export default function EditOverlay({
 
                 {/* Smart */}
                 <button
-                    style={{ ...toolBtn(null), width: 70, minWidth: 70, opacity: 0.4 }}
-                    disabled
+                    style={{ ...toolBtn(null), width: 70, minWidth: 70 }}
+                    onClick={onSmartCapture}
                 >
                     SMART
                 </button>

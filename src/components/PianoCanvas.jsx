@@ -22,7 +22,7 @@ export default function PianoCanvas({
     onZoomChange, keyZoom, onKeyZoomChange,
     rightColor, leftColor,
     songDuration,
-    editMode, isCreateMode, onExitEdit, onAddNote, onUpdateNotes,
+    editMode, isCreateMode, onExitEdit, onAddNote, onUpdateNotes, onSmartCapture,
 }) {
     const canvasRef = useRef(null);
     const rafRef = useRef(null);
@@ -504,6 +504,7 @@ export default function PianoCanvas({
                     songDuration={songDuration}
                     lookAhead={stateRef.current.lookAhead}
                     isCreateMode={isCreateMode}
+                    onSmartCapture={onSmartCapture}
                 />
             )}
         </div>

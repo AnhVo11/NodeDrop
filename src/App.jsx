@@ -4,6 +4,7 @@ import PianoCanvas from './components/PianoCanvas';
 import { useAudio } from './hooks/useAudio';
 import { parseMidi } from './hooks/useMidi';
 import { exportMidi } from './hooks/useExportMidi';
+import WatchZone from './components/WatchZone';
 
 
 const MIN_NOTE = 21;
@@ -29,6 +30,7 @@ export default function App() {
     const [activeKeys, setActiveKeys] = useState(new Map());
     const [editMode, setEditMode] = useState(false);
     const [isCreateMode, setIsCreateMode] = useState(false);
+    const [showWatchZone, setShowWatchZone] = useState(false);
     const [loop, setLoop] = useState(false);
     const [savePrompt, setSavePrompt] = useState(false);
     const [editSongTitle, setEditSongTitle] = useState('');
@@ -312,6 +314,7 @@ export default function App() {
                 editMode={editMode}
                 isCreateMode={isCreateMode}
                 onExitEdit={handleExitEdit}
+                onSmartCapture={() => setShowWatchZone(true)}
                 onAddNote={handleAddNote}
                 onUpdateNotes={handleUpdateNotes}
             />
@@ -344,6 +347,25 @@ export default function App() {
                 hiddenHands={hiddenHands}
                 onToggleHideHand={(hand) => setHiddenHands(h => ({ ...h, [hand]: !h[hand] }))}
             />
+            {showWatchZone && (
+                <WatchZone
+                    onCaptureDone={(notes) => {
+                        setShowWatchZone(false);
+                        setSong(notes);
+                        setNoteObjs(notes.map(n => ({ ...n, sliced: false })));
+                        setSongTitle('Captured Song');
+                        setIsPlaying(false);
+                        setPlayOffset(0);
+                        setPlayStart(0);
+                        setScheduled(new Set());
+                        setActiveKeys(new Map());
+                        setIsCreateMode(true);
+                        setEditMode(true);
+                    }}
+                    onClose={() => setShowWatchZone(false)}
+                />
+            )}
+
             {savePrompt && (
                 <div style={{
                     position: 'fixed', inset: 0, zIndex: 200,
