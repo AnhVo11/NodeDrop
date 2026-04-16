@@ -7,7 +7,7 @@ const PIANO_OVERLAY_H = 60;
 const TRIGGER_FROM_BOTTOM = 0.45;
 const BG_TOLERANCE = 35;
 const NOTE_OFF_FRAMES = 5;
-const NOTE_HIT_THRESHOLD = 0.4;
+const NOTE_HIT_THRESHOLD = 0.6;
 
 function isBlackKey(note) {
     const m = note % 12;
@@ -25,7 +25,7 @@ function buildKeyMap(zoneW, leftNote = MIN_NOTE, rightNote = MAX_NOTE, leftTrim 
     const ww = zoneW / Math.max(1, totalWhites);
     const keyMap = {};
     let wi = 0;
-  for (let n = leftNote; n <= rightNote; n++) {
+    for (let n = leftNote; n <= rightNote; n++) {
         if (!isBlackKey(n)) {
             keyMap[n] = { xStart: Math.floor(wi * ww), xEnd: Math.ceil((wi + 1) * ww), isBlack: false };
             wi++;
@@ -75,8 +75,8 @@ export default function WatchZone({ onCaptureDone, onClose }) {
     const [leftAnchor, setLeftAnchor] = useState(MIN_NOTE);
     const [rightAnchor, setRightAnchor] = useState(MAX_NOTE);
     const [anchorMode, setAnchorMode] = useState(null);
-    const [leftTrim, setLeftTrim] = useState(0);  // px trimmed from left edge key
-    const [rightTrim, setRightTrim] = useState(0); // px trimmed from right edge key
+    const [leftTrim, setLeftTrim] = useState(0);  // % trimmed from left edge key (0-80)
+    const [rightTrim, setRightTrim] = useState(0); // % trimmed from right edge key (0-80)
     const anchorRef = useRef({ left: MIN_NOTE, right: MAX_NOTE, leftTrim: 0, rightTrim: 0 });
 
     const videoRef = useRef(null);
@@ -99,6 +99,7 @@ export default function WatchZone({ onCaptureDone, onClose }) {
     useEffect(() => {
         anchorRef.current = { left: leftAnchor, right: rightAnchor, leftTrim, rightTrim };
     }, [leftAnchor, rightAnchor, leftTrim, rightTrim]);
+
     useEffect(() => { sampledColorsRef.current = sampledColors; }, [sampledColors]);
     useEffect(() => { bgColorRef.current = bgColor; }, [bgColor]);
 
@@ -151,10 +152,15 @@ export default function WatchZone({ onCaptureDone, onClose }) {
             ovCtx.fillStyle = 'rgba(0,0,0,0.5)';
             ovCtx.fillRect(0, 0, cw, ch);
             ovCtx.clearRect(z.x, z.y, z.w, z.h);
-
+            const { left: aln, right: arn, leftTrim: ltPct, rightTrim: rtPct } = anchorRef.current;
+            const keyW = z.w / Math.max(1, countWhites(aln, arn));
+            const lt = Math.round(keyW * ltPct / 100);
+            const rt = Math.round(keyW * rtPct / 100);
+            const leftEdge = z.x + lt;
+            const rightEdge = z.x + z.w - rt;
             ovCtx.strokeStyle = phase === 'recording' ? '#e63946' : '#c9a84c';
             ovCtx.lineWidth = 2;
-            ovCtx.strokeRect(z.x, z.y, z.w, z.h);
+            ovCtx.strokeRect(leftEdge, z.y, z.w - lt - rt, z.h);
 
             const noteAreaH = z.h - PIANO_OVERLAY_H;
             const trigY = z.y + noteAreaH * (1 - TRIGGER_FROM_BOTTOM);
@@ -162,8 +168,8 @@ export default function WatchZone({ onCaptureDone, onClose }) {
             ovCtx.lineWidth = 2;
             ovCtx.setLineDash([6, 3]);
             ovCtx.beginPath();
-            ovCtx.moveTo(z.x, trigY);
-            ovCtx.lineTo(z.x + z.w, trigY);
+            ovCtx.moveTo(leftEdge, trigY);
+            ovCtx.lineTo(rightEdge, trigY);
             ovCtx.stroke();
             ovCtx.setLineDash([]);
 
@@ -213,11 +219,16 @@ export default function WatchZone({ onCaptureDone, onClose }) {
             // Draw alignment lines for selected key
             if (selectedKeyRef.current !== null) {
                 const sk = selectedKeyRef.current;
-                const fullKm = buildKeyMap(z.w, anchorRef.current.left, anchorRef.current.right, anchorRef.current.leftTrim, anchorRef.current.rightTrim);
+                const { left: aln2, right: arn2, leftTrim: ltPct2 } = anchorRef.current;
+                const keyW2 = z.w / Math.max(1, countWhites(aln2, arn2));
+                const lt2 = Math.round(keyW2 * ltPct2 / 100);
+                const fullKm = buildKeyMap(z.w, aln2, arn2, 0, 0);
                 const km = fullKm[sk];
                 if (km) {
-                    const x1 = z.x + km.xStart;
-                    const x2 = z.x + km.xEnd;
+                    let x1 = z.x + km.xStart;
+                    let x2 = z.x + km.xEnd;
+                    if (sk === aln2) x1 = z.x + lt2;
+                    if (sk === arn2) x2 = rightEdge;
                     ovCtx.strokeStyle = 'rgba(255,220,0,0.9)';
                     ovCtx.lineWidth = 1.5;
                     ovCtx.setLineDash([4, 4]);
@@ -259,25 +270,28 @@ export default function WatchZone({ onCaptureDone, onClose }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [phase, crosshair]);
 
-   function drawPianoOverlay(ctx, z) {
+    function drawPianoOverlay(ctx, z) {
         const ky = z.y + z.h - PIANO_OVERLAY_H;
-        const { left: ln, right: rn, leftTrim: lt, rightTrim: rt } = anchorRef.current;
+        const { left: ln, right: rn } = anchorRef.current;
         const totalW = countWhites(ln, rn);
         const ww = z.w / Math.max(1, totalW);
         ctx.fillStyle = 'rgba(7,7,12,0.8)';
         ctx.fillRect(z.x, ky, z.w, PIANO_OVERLAY_H);
+        const keyW = ww;
+        const lt = Math.round(keyW * anchorRef.current.leftTrim / 100);
+        const rt = Math.round(keyW * anchorRef.current.rightTrim / 100);
         let wi = 0;
         for (let n = ln; n <= rn; n++) {
             if (isBlackKey(n)) continue;
             let x = z.x + wi * ww;
-            let w = ww;
-            if (n === ln) { x += lt; w -= lt; }
-            if (n === rn) { w -= rt; }
+            let kw = ww;
+            if (n === ln) { x += lt; kw -= lt; }
+            if (n === rn) { kw -= rt; }
             ctx.fillStyle = 'rgba(232,227,212,0.9)';
-            ctx.fillRect(x + 0.5, ky + 2, w - 1, PIANO_OVERLAY_H - 3);
+            ctx.fillRect(x + 0.5, ky + 2, kw - 1, PIANO_OVERLAY_H - 3);
             ctx.strokeStyle = 'rgba(0,0,0,0.3)';
             ctx.lineWidth = 0.5;
-            ctx.strokeRect(x + 0.5, ky + 2, w - 1, PIANO_OVERLAY_H - 3);
+            ctx.strokeRect(x + 0.5, ky + 2, kw - 1, PIANO_OVERLAY_H - 3);
             wi++;
         }
         const bkm = buildKeyMap(z.w, ln, rn, 0, 0);
@@ -292,7 +306,7 @@ export default function WatchZone({ onCaptureDone, onClose }) {
     function drawKeyMapOverlay(ctx, z) {
         const noteAreaH = z.h - PIANO_OVERLAY_H;
         const trigY = z.y + noteAreaH * (1 - TRIGGER_FROM_BOTTOM);
-       const km = buildKeyMap(z.w, anchorRef.current.left, anchorRef.current.right, anchorRef.current.leftTrim, anchorRef.current.rightTrim);
+        const km = buildKeyMap(z.w, anchorRef.current.left, anchorRef.current.right, anchorRef.current.leftTrim, anchorRef.current.rightTrim);
         for (let n = anchorRef.current.left; n <= anchorRef.current.right; n++) {
             if (isBlackKey(n) || !km[n]) continue;
             const x = z.x + km[n].xStart;
@@ -362,6 +376,7 @@ export default function WatchZone({ onCaptureDone, onClose }) {
 
         // Check piano key clicks in setup and calibrate
         if (phase === 'calibrate' || phase === 'setup') {
+            const z = zoneRef.current;
             const ky = z.y + z.h - PIANO_OVERLAY_H;
             if (my >= ky && my <= z.y + z.h) {
                 const relX = mx - z.x;
@@ -403,7 +418,7 @@ export default function WatchZone({ onCaptureDone, onClose }) {
                 setDragState({ type: 'move', startX: mx, startY: my, startZone: { ...z } });
             }
         }
-    }, [phase, sampleColor]);
+    }, [phase, sampleColor, anchorMode]);
 
     const onPointerMove = useCallback((e) => {
         const { clientX: mx, clientY: my } = e;
@@ -434,7 +449,15 @@ export default function WatchZone({ onCaptureDone, onClose }) {
 
         async function scan() {
             try {
-                const z = zoneRef.current;
+                const rawZ = zoneRef.current;
+                const keyW = rawZ.w / Math.max(1, countWhites(anchorRef.current.left, anchorRef.current.right));
+                const ltPx = Math.round(keyW * anchorRef.current.leftTrim / 100);
+                const rtPx = Math.round(keyW * anchorRef.current.rightTrim / 100);
+                const z = {
+                    ...rawZ,
+                    x: rawZ.x + ltPx,
+                    w: Math.max(50, rawZ.w - ltPx - rtPx),
+                };
                 const bg = bgColorRef.current;
                 if (!bg) { scanTimerRef.current = setTimeout(scan, 33); return; }
 
@@ -473,7 +496,7 @@ export default function WatchZone({ onCaptureDone, onClose }) {
                 scanH = imageData.height;
                 const now = (performance.now() - startTimeRef.current) / 1000;
                 const activeNow = new Set();
-               const { left: leftNote, right: rightNote } = anchorRef.current;
+                const { left: leftNote, right: rightNote } = anchorRef.current;
                 const keyMap = buildKeyMap(scanW, leftNote, rightNote, 0, 0);
 
                 // First pass: compute hit ratio for every key
@@ -509,7 +532,7 @@ export default function WatchZone({ onCaptureDone, onClose }) {
 
                     // Must be a local peak: significantly higher than neighbors
                     // OR neighbors are also high (chord — both notes playing)
-                    const isLocalPeak = ratio >= maxNeighbor * 1.4 || ratio >= 0.7;
+                    const isLocalPeak = ratio >= maxNeighbor * 1.4 || ratio >= 0.85;
                     const isHighEnough = ratio >= NOTE_HIT_THRESHOLD;
 
                     if (isHighEnough && isLocalPeak) {
@@ -640,21 +663,21 @@ export default function WatchZone({ onCaptureDone, onClose }) {
                     <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, letterSpacing: 1.5 }}>
                         ALIGN PIANO OVERLAY WITH VIDEO KEYS · DRAG EDGES TO FIT
                     </span>
-                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, letterSpacing: 1 }}>LEFT KEY:</span>
                         <button style={{ ...btnStyle(false), padding: '4px 8px', fontSize: 12 }}
-                            onClick={() => setLeftTrim(t => Math.max(0, t - 2))}>▼</button>
-                        <span style={{ color: '#c9a84c', fontSize: 11, minWidth: 28, textAlign: 'center' }}>{leftTrim}px</span>
+                            onClick={() => setLeftTrim(t => Math.min(80, t + 5))}>▼</button>
+                        <span style={{ color: '#c9a84c', fontSize: 11, minWidth: 36, textAlign: 'center' }}>{100 - leftTrim}%</span>
                         <button style={{ ...btnStyle(false), padding: '4px 8px', fontSize: 12 }}
-                            onClick={() => setLeftTrim(t => t + 2)}>▲</button>
+                            onClick={() => setLeftTrim(t => Math.max(0, t - 5))}>▲</button>
                     </div>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, letterSpacing: 1 }}>RIGHT KEY:</span>
                         <button style={{ ...btnStyle(false), padding: '4px 8px', fontSize: 12 }}
-                            onClick={() => setRightTrim(t => Math.max(0, t - 2))}>▼</button>
-                        <span style={{ color: '#c9a84c', fontSize: 11, minWidth: 28, textAlign: 'center' }}>{rightTrim}px</span>
+                            onClick={() => setRightTrim(t => Math.min(80, t + 5))}>▼</button>
+                        <span style={{ color: '#c9a84c', fontSize: 11, minWidth: 36, textAlign: 'center' }}>{100 - rightTrim}%</span>
                         <button style={{ ...btnStyle(false), padding: '4px 8px', fontSize: 12 }}
-                            onClick={() => setRightTrim(t => t + 2)}>▲</button>
+                            onClick={() => setRightTrim(t => Math.max(0, t - 5))}>▲</button>
                     </div>
                     <button style={btnStyle(true)} onClick={() => setPhase('calibrate')}>NEXT: CALIBRATE COLORS →</button>
                     <button style={btnStyle(false, true)} onClick={() => { streamRef.current?.getTracks().forEach(t => t.stop()); onClose(); }}>CANCEL</button>
