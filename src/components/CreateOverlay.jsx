@@ -845,12 +845,12 @@ export default function CreateOverlay({
                 <div style={{ width: 1, background: 'rgba(201,168,76,0.15)', flexShrink: 0, alignSelf: 'stretch' }} />
 
 
-                {/* Smart */}
+                {/* NoteReader */}
                 <button
-                    style={{ ...toolBtn(null), width: 70, minWidth: 70 }}
+                    style={{ ...toolBtn(null), width: 90, minWidth: 90 }}
                     onClick={onSmartCapture}
                 >
-                    SMART
+                    NOTEREADER
                 </button>
 
                 <div style={{ width: 1, background: 'rgba(201,168,76,0.15)', flexShrink: 0, alignSelf: 'stretch' }} />

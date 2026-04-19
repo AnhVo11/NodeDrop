@@ -75,9 +75,15 @@ export default function WatchZone({ onCaptureDone, onClose }) {
     const [leftAnchor, setLeftAnchor] = useState(MIN_NOTE);
     const [rightAnchor, setRightAnchor] = useState(MAX_NOTE);
     const [anchorMode, setAnchorMode] = useState(null);
-    const [leftTrim, setLeftTrim] = useState(0);  // % trimmed from left edge key (0-80)
-    const [rightTrim, setRightTrim] = useState(0); // % trimmed from right edge key (0-80)
+    const [leftTrim, setLeftTrim] = useState(0);
+    const [rightTrim, setRightTrim] = useState(0);
     const anchorRef = useRef({ left: MIN_NOTE, right: MAX_NOTE, leftTrim: 0, rightTrim: 0 });
+    const [scanMode, setScanMode] = useState('fill'); // 'fill' | 'point'
+    const [fillThreshold, setFillThreshold] = useState(60); // %
+    const [pointConfig, setPointConfig] = useState({ front: true, middle: true, end: false });
+    const scanModeRef = useRef('fill');
+    const fillThresholdRef = useRef(0.6);
+    const pointConfigRef = useRef({ front: true, middle: true, end: false });
 
     const videoRef = useRef(null);
     const bgCanvasRef = useRef(null);
@@ -100,11 +106,18 @@ export default function WatchZone({ onCaptureDone, onClose }) {
     }, [leftAnchor, rightAnchor, leftTrim, rightTrim]);
 
     useEffect(() => { bgColorRef.current = bgColor; }, [bgColor]);
+    useEffect(() => { scanModeRef.current = scanMode; }, [scanMode]);
+    useEffect(() => { fillThresholdRef.current = fillThreshold / 100; }, [fillThreshold]);
+    useEffect(() => { pointConfigRef.current = pointConfig; }, [pointConfig]);
 
     // ---- Start screen share ----
     const startCapture = async () => {
         try {
-            const s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false });
+            const s = await navigator.mediaDevices.getDisplayMedia({
+                video: { frameRate: 30, displaySurface: 'window' },
+                audio: false,
+                preferCurrentTab: false,
+            });
             streamRef.current = s;
             const track = s.getVideoTracks()[0];
             if (typeof ImageCapture !== 'undefined') {
@@ -116,6 +129,8 @@ export default function WatchZone({ onCaptureDone, onClose }) {
                 await videoRef.current.play();
             }
             s.getVideoTracks()[0].addEventListener('ended', () => onClose());
+            // Bring NoteDrop back into focus after Chrome switches to shared tab
+            setTimeout(() => window.focus(), 500);
             setPhase('setup');
         } catch (err) {
             console.error('Screen capture failed:', err?.message || err);
@@ -476,6 +491,25 @@ export default function WatchZone({ onCaptureDone, onClose }) {
                 // First pass: compute hit ratio for every key
                 const hitRatios = {};
                 const hitHandMap = {};
+                const mode = scanModeRef.current;
+                const pc = pointConfigRef.current;
+                const threshold = fillThresholdRef.current;
+
+                function pixelIsNote(px, py) {
+                    const i = (py * scanW + px) * 4;
+                    const r = data[i], g = data[i + 1], b = data[i + 2];
+                    return colorDist(r, g, b, bg.r, bg.g, bg.b) > BG_TOLERANCE;
+                }
+
+                function checkPoint(colX) {
+                    // Check a 2px wide column at colX across full scanH
+                    let hits = 0;
+                    for (let py = 0; py < scanH; py++) {
+                        if (pixelIsNote(Math.min(scanW - 1, colX), py)) hits++;
+                    }
+                    return hits / scanH > 0.3; // 30% of that column height must match
+                }
+
                 for (let n = MIN_NOTE; n <= MAX_NOTE; n++) {
                     const km = keyMap[n];
                     if (!km) continue;
@@ -484,20 +518,32 @@ export default function WatchZone({ onCaptureDone, onClose }) {
                     const totalCols = colEnd - colStart + 1;
                     if (totalCols <= 0) { hitRatios[n] = 0; continue; }
 
-                    let matchCount = 0;
-                    const bestHand = 0;
+                    let hit = false;
 
-                    for (let px = colStart; px <= colEnd; px++) {
-                        for (let py = 0; py < scanH; py++) {
-                            const i = (py * scanW + px) * 4;
-                            const r = data[i], g = data[i + 1], b = data[i + 2];
-                            if (bg && colorDist(r, g, b, bg.r, bg.g, bg.b) > BG_TOLERANCE) matchCount++;
+                    if (mode === 'point') {
+                        const frontCol = Math.floor(colStart + totalCols * 0.1);
+                        const midCol = Math.floor(colStart + totalCols * 0.5);
+                        const endCol = Math.floor(colStart + totalCols * 0.9);
+                        const results = {
+                            front: checkPoint(frontCol),
+                            middle: checkPoint(midCol),
+                            end: checkPoint(endCol),
+                        };
+                        // All selected points must detect a note
+                        hit = Object.entries(pc).every(([key, required]) => !required || results[key]);
+                        hitRatios[n] = hit ? 1.0 : 0;
+                    } else {
+                        let matchCount = 0;
+                        for (let px = colStart; px <= colEnd; px++) {
+                            for (let py = 0; py < scanH; py++) {
+                                if (pixelIsNote(px, py)) matchCount++;
+                            }
                         }
+                        hitRatios[n] = matchCount / (totalCols * scanH);
+                        hit = hitRatios[n] >= threshold;
                     }
-                    hitRatios[n] = matchCount / (totalCols * scanH);
-                    if (hitRatios[n] >= NOTE_HIT_THRESHOLD) {
-                        hitHandMap[n] = bestHand;
-                    }
+
+                    hitHandMap[n] = 0;
                 }
 
                 // Second pass: a note fires only if its ratio is a LOCAL PEAK
@@ -529,7 +575,7 @@ export default function WatchZone({ onCaptureDone, onClose }) {
                     // Must be a local peak: significantly higher than neighbors
                     // OR neighbors are also high (chord — both notes playing)
                     const isLocalPeak = ratio >= maxNeighbor * 1.4 || ratio >= 0.85;
-                    const isHighEnough = ratio >= NOTE_HIT_THRESHOLD;
+                    const isHighEnough = scanModeRef.current === 'point' ? ratio >= 0.9 : ratio >= fillThresholdRef.current;
 
                     if (isHighEnough && isLocalPeak) {
                         const hand = hitHandMap[n] ?? 0;
@@ -632,11 +678,11 @@ export default function WatchZone({ onCaptureDone, onClose }) {
                         boxShadow: '0 24px 64px rgba(0,0,0,0.8)',
                     }}>
                         <div style={{ color: '#c9a84c', fontSize: 13, letterSpacing: 4, textTransform: 'uppercase', textAlign: 'center' }}>
-                            Smart Capture
+                            NoteReader
                         </div>
                         <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, lineHeight: 2.2, letterSpacing: 1 }}>
-                            <b style={{ color: 'rgba(201,168,76,0.8)' }}>1.</b> Open a Synthesia-style piano video in another tab<br />
-                            <b style={{ color: 'rgba(201,168,76,0.8)' }}>2.</b> Share your screen here<br />
+                            <b style={{ color: 'rgba(201,168,76,0.8)' }}>1.</b> Open a falling notes piano video in another window<br />
+                            <b style={{ color: 'rgba(201,168,76,0.8)' }}>2.</b> Click Share Screen — choose <b style={{ color: 'white' }}>Window</b> not Tab<br />
                             <b style={{ color: 'rgba(201,168,76,0.8)' }}>3.</b> Align the zone so the piano overlay matches the video keys<br />
                             <b style={{ color: 'rgba(201,168,76,0.8)' }}>4.</b> Click the background color, then click a note color<br />
                             <b style={{ color: 'rgba(201,168,76,0.8)' }}>5.</b> Hit Record!
@@ -722,6 +768,65 @@ export default function WatchZone({ onCaptureDone, onClose }) {
                             </div>
                         </div>
                     )}
+
+                    {/* Scan settings */}
+                    <div style={{
+                        display: 'flex', flexDirection: 'column', gap: 10,
+                        background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '10px 14px',
+                        border: '1px solid rgba(201,168,76,0.15)',
+                    }}>
+                        {/* Mode toggle */}
+                        <div style={{ display: 'flex', gap: 6 }}>
+                            {['fill', 'point'].map(m => (
+                                <button key={m} style={{ ...btnStyle(scanMode === m), padding: '4px 12px', fontSize: 10 }}
+                                    onClick={() => setScanMode(m)}>
+                                    {m === 'fill' ? 'FILL %' : 'POINT'}
+                                </button>
+                            ))}
+                        </div>
+
+                        {scanMode === 'fill' && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, letterSpacing: 1 }}>MATCH</span>
+                                <input type="range" min="20" max="95" value={fillThreshold}
+                                    onChange={e => setFillThreshold(parseInt(e.target.value))}
+                                    style={{ width: 80, height: 2, accentColor: '#c9a84c' }} />
+                                <span style={{ color: '#c9a84c', fontSize: 11, fontFamily: 'monospace' }}>{fillThreshold}%</span>
+                            </div>
+                        )}
+
+                        {scanMode === 'point' && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {/* Mini key visual */}
+                                <div style={{ position: 'relative', height: 28, width: 120, background: 'rgba(232,227,212,0.15)', borderRadius: 4, border: '1px solid rgba(255,255,255,0.15)' }}>
+                                    {[
+                                        { key: 'front', pct: 10, label: 'F' },
+                                        { key: 'middle', pct: 50, label: 'M' },
+                                        { key: 'end', pct: 90, label: 'E' },
+                                    ].map(({ key, pct, label }) => (
+                                        <div key={key}
+                                            onClick={() => setPointConfig(p => ({ ...p, [key]: !p[key] }))}
+                                            style={{
+                                                position: 'absolute', left: `${pct}%`, top: '50%',
+                                                transform: 'translate(-50%, -50%)',
+                                                width: 14, height: 14, borderRadius: '50%',
+                                                background: pointConfig[key] ? '#c9a84c' : 'rgba(255,255,255,0.15)',
+                                                border: `2px solid ${pointConfig[key] ? '#c9a84c' : 'rgba(255,255,255,0.3)'}`,
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            }}>
+                                            <span style={{ fontSize: 7, color: pointConfig[key] ? '#000' : 'rgba(255,255,255,0.5)', fontWeight: 'bold' }}>{label}</span>
+                                        </div>
+                                    ))}
+                                    {/* Key divider lines */}
+                                    <div style={{ position: 'absolute', left: '33%', top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.1)' }} />
+                                    <div style={{ position: 'absolute', left: '66%', top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.1)' }} />
+                                </div>
+                                <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 9, letterSpacing: 1 }}>
+                                    SELECTED POINTS MUST ALL DETECT NOTE
+                                </span>
+                            </div>
+                        )}
+                    </div>
 
                     {bgColor && (
                         <button style={btnStyle(false)} onClick={() => setBgColor(null)}>RESET</button>
