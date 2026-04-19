@@ -66,10 +66,10 @@ export default function WatchZone({ onCaptureDone, onClose }) {
     const [phase, setPhase] = useState('init');
     const [zone, setZone] = useState({ x: 150, y: 100, w: 760, h: 400 });
     const [dragState, setDragState] = useState(null);
-    const [sampledColors, setSampledColors] = useState([]);
     const [bgColor, setBgColor] = useState(null);
     const [noteCount, setNoteCount] = useState(0);
     const [crosshair, setCrosshair] = useState(null);
+    const [hoverColor, setHoverColor] = useState(null);
     const [selectedKey, setSelectedKey] = useState(null);
     const selectedKeyRef = useRef(null);
     const [leftAnchor, setLeftAnchor] = useState(MIN_NOTE);
@@ -90,7 +90,6 @@ export default function WatchZone({ onCaptureDone, onClose }) {
     const activeRef = useRef(new Map());
     const notesRef = useRef([]);
     const zoneRef = useRef(zone);
-    const sampledColorsRef = useRef([]);
     const bgColorRef = useRef(null);
     const noteCountRef = useRef(0);
 
@@ -100,7 +99,6 @@ export default function WatchZone({ onCaptureDone, onClose }) {
         anchorRef.current = { left: leftAnchor, right: rightAnchor, leftTrim, rightTrim };
     }, [leftAnchor, rightAnchor, leftTrim, rightTrim]);
 
-    useEffect(() => { sampledColorsRef.current = sampledColors; }, [sampledColors]);
     useEffect(() => { bgColorRef.current = bgColor; }, [bgColor]);
 
     // ---- Start screen share ----
@@ -186,20 +184,6 @@ export default function WatchZone({ onCaptureDone, onClose }) {
                 });
             }
 
-            sampledColorsRef.current.forEach((sc, i) => {
-                ovCtx.fillStyle = `rgb(${sc.r},${sc.g},${sc.b})`;
-                ovCtx.beginPath();
-                ovCtx.arc(z.x + 20 + i * 30, trigY - 20, 10, 0, Math.PI * 2);
-                ovCtx.fill();
-                ovCtx.strokeStyle = 'white';
-                ovCtx.lineWidth = 1.5;
-                ovCtx.stroke();
-                ovCtx.fillStyle = 'white';
-                ovCtx.font = 'bold 9px sans-serif';
-                ovCtx.textAlign = 'center';
-                ovCtx.fillText(i === 0 ? 'R' : 'L', z.x + 20 + i * 30, trigY - 16);
-                ovCtx.textAlign = 'left';
-            });
 
             if (phase === 'calibrate' && crosshair) {
                 ovCtx.strokeStyle = 'white';
@@ -216,7 +200,7 @@ export default function WatchZone({ onCaptureDone, onClose }) {
                 ovCtx.stroke();
             }
 
-            // Draw alignment lines for selected key
+            // Draw alignment lines for se lected key
             if (selectedKeyRef.current !== null) {
                 const sk = selectedKeyRef.current;
                 const { left: aln2, right: arn2, leftTrim: ltPct2 } = anchorRef.current;
@@ -320,39 +304,20 @@ export default function WatchZone({ onCaptureDone, onClose }) {
     }
 
     // ---- Grab pixel from video ----
-    const grabPixel = useCallback(async (screenX, screenY) => {
+    const grabPixel = useCallback((screenX, screenY) => {
         try {
-            if (imageCaptureRef.current) {
-                const track = streamRef.current?.getVideoTracks()[0];
-                if (!track || track.readyState !== 'live') return null;
-                const bitmap = await imageCaptureRef.current.grabFrame();
-                const sc = document.createElement('canvas');
-                sc.width = bitmap.width; sc.height = bitmap.height;
-                const ctx = sc.getContext('2d');
-                ctx.drawImage(bitmap, 0, 0);
-                bitmap.close();
-                const dpr = bitmap.width / window.innerWidth;
-                const px = Math.min(bitmap.width - 1, Math.floor(screenX * dpr));
-                const py = Math.min(bitmap.height - 1, Math.floor(screenY * dpr));
-                const pixel = ctx.getImageData(px, py, 1, 1).data;
-                return { r: pixel[0], g: pixel[1], b: pixel[2] };
-            } else {
-                const bgCtx = bgCanvasRef.current?.getContext('2d');
-                if (!bgCtx) return null;
-                const pixel = bgCtx.getImageData(screenX, screenY, 1, 1).data;
-                return { r: pixel[0], g: pixel[1], b: pixel[2] };
-            }
+            const bgCtx = bgCanvasRef.current?.getContext('2d');
+            if (!bgCtx) return null;
+            const pixel = bgCtx.getImageData(Math.floor(screenX), Math.floor(screenY), 1, 1).data;
+            return { r: pixel[0], g: pixel[1], b: pixel[2] };
         } catch (err) {
             console.error('grabPixel failed:', err?.message || err);
             return null;
         }
     }, []);
 
-    const sampleColor = useCallback(async (screenX, screenY) => {
-        if (sampleColor._busy) return;
-        sampleColor._busy = true;
-        setTimeout(() => { sampleColor._busy = false; }, 500);
-        const result = await grabPixel(screenX, screenY);
+    const sampleColor = useCallback((screenX, screenY) => {
+        const result = grabPixel(screenX, screenY);
         if (!result) return;
         const { r, g, b } = result;
         console.log(`Sampled rgb(${r},${g},${b})`);
@@ -422,7 +387,16 @@ export default function WatchZone({ onCaptureDone, onClose }) {
 
     const onPointerMove = useCallback((e) => {
         const { clientX: mx, clientY: my } = e;
-        if (phase === 'calibrate') { setCrosshair({ x: mx, y: my }); return; }
+        if (phase === 'calibrate') {
+            setCrosshair({ x: mx, y: my });
+            // Sample color under cursor for live preview
+            const bgCtx = bgCanvasRef.current?.getContext('2d');
+            if (bgCtx) {
+                const pixel = bgCtx.getImageData(mx, my, 1, 1).data;
+                setHoverColor({ r: pixel[0], g: pixel[1], b: pixel[2] });
+            }
+            return;
+        }
         if (!dragState) return;
         const dx = mx - dragState.startX, dy = my - dragState.startY;
         const sz = dragState.startZone;
@@ -501,6 +475,7 @@ export default function WatchZone({ onCaptureDone, onClose }) {
 
                 // First pass: compute hit ratio for every key
                 const hitRatios = {};
+                const hitHandMap = {};
                 for (let n = MIN_NOTE; n <= MAX_NOTE; n++) {
                     const km = keyMap[n];
                     if (!km) continue;
@@ -508,15 +483,36 @@ export default function WatchZone({ onCaptureDone, onClose }) {
                     const colEnd = Math.min(scanW - 1, km.xEnd);
                     const totalCols = colEnd - colStart + 1;
                     if (totalCols <= 0) { hitRatios[n] = 0; continue; }
+
                     let matchCount = 0;
+                    const bestHand = 0;
+
                     for (let px = colStart; px <= colEnd; px++) {
                         for (let py = 0; py < scanH; py++) {
                             const i = (py * scanW + px) * 4;
                             const r = data[i], g = data[i + 1], b = data[i + 2];
-                            if (colorDist(r, g, b, bg.r, bg.g, bg.b) > BG_TOLERANCE) matchCount++;
+                            if (bg && colorDist(r, g, b, bg.r, bg.g, bg.b) > BG_TOLERANCE) matchCount++;
                         }
                     }
                     hitRatios[n] = matchCount / (totalCols * scanH);
+                    if (hitRatios[n] >= NOTE_HIT_THRESHOLD) {
+                        hitHandMap[n] = bestHand;
+                    }
+                }
+
+                // Second pass: a note fires only if its ratio is a LOCAL PEAK
+                // Debug: log top 5 highest hit ratio keys every 2 seconds
+                if (Math.floor(now * 0.5) !== Math.floor((now - 0.033) * 0.5)) {
+                    const sorted = Object.entries(hitRatios)
+                        .filter(([, v]) => v > 0.05)
+                        .sort(([, a], [, b]) => b - a)
+                        .slice(0, 5);
+                    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+                    const labels = sorted.map(([n, v]) => {
+                        const ni = parseInt(n);
+                        return `${noteNames[(ni - 21) % 12]}${Math.floor((ni - 12) / 12)}:${v.toFixed(2)}`;
+                    });
+                    console.log('Top keys:', labels.join(' | ') || 'none');
                 }
 
                 // Second pass: a note fires only if its ratio is a LOCAL PEAK
@@ -536,10 +532,11 @@ export default function WatchZone({ onCaptureDone, onClose }) {
                     const isHighEnough = ratio >= NOTE_HIT_THRESHOLD;
 
                     if (isHighEnough && isLocalPeak) {
-                        const key = `${n}_0`;
+                        const hand = hitHandMap[n] ?? 0;
+                        const key = `${n}_${hand}`;
                         activeNow.add(key);
                         if (!activeRef.current.has(key)) {
-                            activeRef.current.set(key, { startTime: now, hand: 0, absentFrames: 0 });
+                            activeRef.current.set(key, { startTime: now, hand, absentFrames: 0 });
                         } else {
                             activeRef.current.get(key).absentFrames = 0;
                         }
@@ -693,24 +690,41 @@ export default function WatchZone({ onCaptureDone, onClose }) {
                     borderRadius: 12, padding: '12px 20px', boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
                     maxWidth: '90vw',
                 }}>
-                    <span style={{ color: bgColor && sampledColors.length > 0 ? '#c9a84c' : 'rgba(255,255,255,0.6)', fontSize: 11, letterSpacing: 1.5 }}>
+                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, letterSpacing: 1.5 }}>
                         {calibrateInstruction}
                     </span>
+                    {hoverColor && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 6, padding: '4px 10px' }}>
+                            <div style={{
+                                width: 16, height: 16, borderRadius: 3, flexShrink: 0,
+                                background: `rgb(${hoverColor.r},${hoverColor.g},${hoverColor.b})`,
+                                border: '1px solid rgba(255,255,255,0.3)',
+                            }} />
+                            <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, fontFamily: 'monospace' }}>
+                                rgb({hoverColor.r},{hoverColor.g},{hoverColor.b})
+                            </span>
+                        </div>
+                    )}
 
                     {/* BG color swatch */}
                     {bgColor && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.05)', borderRadius: 6, padding: '4px 10px' }}>
                             <div style={{
-                                width: 16, height: 16, borderRadius: 3,
+                                width: 20, height: 20, borderRadius: 4, flexShrink: 0,
                                 background: `rgb(${bgColor.r},${bgColor.g},${bgColor.b})`,
                                 border: '1.5px solid rgba(255,255,255,0.4)',
                             }} />
-                            <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, letterSpacing: 1 }}>BG</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 9, letterSpacing: 1 }}>BACKGROUND</span>
+                                <span style={{ color: '#c9a84c', fontSize: 10, letterSpacing: 1, fontFamily: 'monospace' }}>
+                                    rgb({bgColor.r},{bgColor.g},{bgColor.b})
+                                </span>
+                            </div>
                         </div>
                     )}
 
                     {bgColor && (
-                        <button style={btnStyle(false)} onClick={() => { setSampledColors([]); setBgColor(null); }}>RESET</button>
+                        <button style={btnStyle(false)} onClick={() => setBgColor(null)}>RESET</button>
                     )}
                     {bgColor && (
                         <button style={btnStyle(true)} onClick={startRecording}>⬤ START RECORDING</button>
