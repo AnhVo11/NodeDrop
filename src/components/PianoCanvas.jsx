@@ -267,7 +267,7 @@ export default function PianoCanvas({
         let lo = 0, hi = noteObjs.length - 1;
         while (lo <= hi) {
             const mid = (lo + hi) >> 1;
-            if (noteObjs[mid].startTime + noteObjs[mid].duration < visStart) { lo = mid + 1; startIdx = lo; }
+            if (noteObjs[mid].startTime < visStart - 30) { lo = mid + 1; startIdx = lo; }
             else hi = mid - 1;
         }
         for (let ni = startIdx; ni < noteObjs.length; ni++) {
@@ -278,7 +278,7 @@ export default function PianoCanvas({
             if (n.startTime + n.duration < visStart) continue;
 
             const r = getNoteRect(n, ch);
-            if (r.x + r.w < 0 || r.x > cw) return;
+            if (r.x + r.w < 0 || r.x > cw) continue;
             const rr = Math.min(r.w * 0.35, 7);
             const fillC = n.hand === 0 ? rightColor : leftColor;
             const past = st - (n.startTime + n.duration);

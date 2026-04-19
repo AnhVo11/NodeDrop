@@ -647,6 +647,7 @@ export default function EditOverlay({
         }
 
         function drawNoteIndicators() {
+            if (editToolRef.current !== 'addNode') return;
             const { noteObjs } = stateRef.current;
             const ch = canvas.height;
             const cw = canvas.width;
