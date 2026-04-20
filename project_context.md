@@ -9,7 +9,7 @@ Falling notes learning — no sheet music needed, learn by watching colored bars
 - GitHub: `https://github.com/AnhVo11/NoteDrop` (note: local folder is `notedrop` lowercase)
 - Local path: `/Users/anhvo/Desktop/notedrop`
 - Run: `npm start` → opens at `http://localhost:3000`
-- Test on iPad: `http://192.168.1.192:3000` (same WiFi)
+- Test on iPad: ipconfig getifaddr en0 (same WiFi)
 
 ## Tech Stack
 - **React** (Create React App)
