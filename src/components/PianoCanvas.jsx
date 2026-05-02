@@ -22,7 +22,7 @@ export default function PianoCanvas({
     onZoomChange, keyZoom, onKeyZoomChange,
     rightColor, leftColor,
     songDuration,
-    editMode, isCreateMode, onExitEdit, onAddNote, onUpdateNotes, onSmartCapture,
+    editMode, isCreateMode, onExitEdit, onAddNote, onUpdateNotes, onSmartCapture, showKeyNames,
 }) {
     const canvasRef = useRef(null);
     const rafRef = useRef(null);
@@ -42,9 +42,8 @@ export default function PianoCanvas({
     stateRef.current = {
         noteObjs, isPlaying, playOffset, playStart,
         tempoScale, scheduled, activeKeys, zoom,
-        rightColor, leftColor, editMode, hiddenHands, lookAhead, keyZoom,
+        rightColor, leftColor, editMode, hiddenHands, lookAhead, keyZoom, showKeyNames,
     };
-
     const getPianoWidth = useCallback(
         () => window.innerWidth * (stateRef.current.keyZoom / 100),
         []
@@ -166,7 +165,7 @@ export default function PianoCanvas({
             if (p.direction === 'h') {
                 const hScale = curH / Math.max(p.initH, 1);
                 const dampened = 1 + (hScale - 1) * 0.3;
-                const newKey = Math.min(200, Math.max(1, p.initKeyZoom * dampened));
+                const newKey = Math.min(200, Math.max(100, p.initKeyZoom * dampened));
                 onKeyZoomChange(Math.round(newKey));
             } else {
                 const vScale = Math.max(p.initV, 1) / curV;
@@ -288,7 +287,17 @@ export default function PianoCanvas({
             ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, rr); ctx.fill();
             ctx.fillStyle = 'rgba(255,255,255,0.4)';
             ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, Math.min(4, r.h), [rr, rr, 0, 0]); ctx.fill();
-
+            if (stateRef.current.showKeyNames && r.h > 14 && r.w > 8) {
+                const noteNames = ['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'];
+                const name = noteNames[(n.note - 21) % 12];
+                ctx.fillStyle = 'rgba(0,0,0,0.9)';
+                ctx.font = `bold ${Math.min(r.w * 0.55, 13)}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(name, r.x + r.w / 2, r.y + r.h / 2);
+                ctx.textBaseline = 'alphabetic';
+                ctx.textAlign = 'left';
+            }
             // Sustain indicator
             if (n.sustain) {
                 ctx.strokeStyle = 'rgba(255,255,255,0.95)';
@@ -353,6 +362,17 @@ export default function PianoCanvas({
                 }
                 ctx.fillStyle = 'rgba(0,0,0,0.18)';
                 ctx.fillRect(x, ky + 2, 1, KEY_H - 4);
+                if (stateRef.current.showKeyNames) {
+                    const noteNames = ['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'];
+                    const name = noteNames[(n - 21) % 12];
+                    if (!name.includes('#')) {
+                        ctx.fillStyle = color ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,1)';
+                        ctx.font = `bold ${Math.min(ww * 0.5, 13)}px sans-serif`;
+                        ctx.textAlign = 'center';
+                        ctx.fillText(name, x + ww / 2, ky + KEY_H - 10);
+                        ctx.textAlign = 'left';
+                    }
+                }
             }
             wi++;
         }
@@ -369,6 +389,15 @@ export default function PianoCanvas({
                 if (color) {
                     ctx.fillStyle = color;
                     ctx.fillRect(x - bw / 2 + 2, ky + bh - 14, bw - 4, 12);
+                }
+                if (stateRef.current.showKeyNames) {
+                    const noteNames = ['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'];
+                    const name = noteNames[(n - 21) % 12];
+                    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                    ctx.font = `bold ${Math.min(bw * 0.55, 9)}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.fillText(name, x, ky + bh - 4);
+                    ctx.textAlign = 'left';
                 }
             }
         }

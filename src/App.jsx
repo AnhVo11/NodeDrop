@@ -12,7 +12,12 @@ const MAX_NOTE = 108;
 
 export default function App() {
     const { initAudio, playNote, scheduleNote, getCtx, setPedal } = useAudio();
-
+    const sendMidiNote = useCallback((note, velocity, duration) => {
+        const out = midiOutputRef.current;
+        if (!out) return;
+        out.send([0x90, note, Math.round(velocity * 127)]);
+        setTimeout(() => out.send([0x80, note, 0]), duration * 1000);
+    }, []);
     const [song, setSong] = useState([]);
     const [noteObjs, setNoteObjs] = useState([]);
     const [songTitle, setSongTitle] = useState('Chopin - Nocturne in E Flat Major');
@@ -36,7 +41,10 @@ export default function App() {
     const [editSongTitle, setEditSongTitle] = useState('');
     const [hiddenHands, setHiddenHands] = useState({ 0: false, 1: false });
     const [keyZoom, setKeyZoom] = useState(100);
-
+    const [showKeyNames, setShowKeyNames] = useState(false);
+    const [midiOutputs, setMidiOutputs] = useState([]);
+    const [selectedMidiOutput, setSelectedMidiOutput] = useState(null);
+    const midiOutputRef = useRef(null);
     const stateRef = useRef({});
     stateRef.current = { isPlaying, playOffset, playStart, tempoScale };
 
@@ -60,7 +68,11 @@ export default function App() {
         kiss: { // 👈 ADD THIS
             file: '/midi/kiss.mid',
             title: 'Yiruma - Kiss the Rain'
-        }
+        },
+        love: {
+            file: '/midi/love.mid',
+            title: 'Francis Lai - Love Story'
+        },
     };
 
     async function loadSong(key) {
@@ -96,6 +108,22 @@ export default function App() {
         loadSong('chopin'); // default
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    useEffect(() => {
+        if (navigator.requestMIDIAccess) {
+            navigator.requestMIDIAccess().then(access => {
+                const outputs = Array.from(access.outputs.values());
+                setMidiOutputs(outputs);
+                access.onstatechange = () => {
+                    setMidiOutputs(Array.from(access.outputs.values()));
+                };
+            }).catch(err => console.error('MIDI access denied:', err));
+        }
+    }, []);
+
+    useEffect(() => {
+        midiOutputRef.current = selectedMidiOutput;
+    }, [selectedMidiOutput]);
     const hasPedal = useMemo(() => song.some(n => n.isPedal), [song]);
 
     useEffect(() => {
@@ -114,7 +142,26 @@ export default function App() {
         return () => clearInterval(interval);
     }, [fullPedal, hasPedal, song, getCurrentTime]);
 
-    useEffect(() => { setPedal(isPedalOn); }, [isPedalOn, setPedal]);
+    useEffect(() => {
+        setPedal(isPedalOn);
+        const out = midiOutputRef.current;
+        if (out) {
+            try {
+                // Only send sustain-off if we're sure pedal is released
+                // Add small delay on sustain-off to prevent false triggers
+                if (isPedalOn) {
+                    out.send([0xB0, 64, 127]);
+                } else {
+                    setTimeout(() => {
+                        if (!midiOutputRef.current) return;
+                        midiOutputRef.current.send([0xB0, 64, 0]);
+                    }, 80);
+                }
+            } catch (e) {
+                console.error('MIDI sustain error:', e);
+            }
+        }
+    }, [isPedalOn, setPedal]);
 
     const handlePlayPause = useCallback(() => {
         initAudio();
@@ -143,6 +190,13 @@ export default function App() {
         setScheduled(new Set());
         setActiveKeys(new Map());
         setNoteObjs(song.map(n => ({ ...n, sliced: false })));
+        const out = midiOutputRef.current;
+        if (out) {
+            try {
+                out.send([0xB0, 64, 0]); // sustain off
+                out.send([0xB0, 123, 0]); // all notes off
+            } catch (e) { }
+        }
     }, [song]);
 
     const handleSongEnd = useCallback(() => {
@@ -189,7 +243,11 @@ export default function App() {
             if (scrubPlayedRef.current.has(key)) return;
             scrubPlayedRef.current.add(key);
             initAudio();
-            playNote(n.note, n.vel * 0.6, Math.min(n.duration, 0.3));
+            try {
+                playNote(n.note, n.vel * 0.6, Math.min(n.duration, 0.3));
+            } catch (e) {
+                // sampler not ready
+            }
             const ac = getCtx();
             if (ac) newActive.set(n.note, { start: 0, end: ac.currentTime + Math.max(n.duration, 0.5), hand: n.hand });
         });
@@ -295,7 +353,17 @@ export default function App() {
                 setScheduled={setScheduled}
                 activeKeys={activeKeys}
                 setActiveKeys={setActiveKeys}
-                scheduleNote={scheduleNote}
+                scheduleNote={(note, vel, dur, when) => {
+                    try {
+                        scheduleNote(note, vel, dur, when);
+                    } catch (e) {
+                        // sampler not ready yet, skip audio
+                    }
+                    const aCtx = getCtx();
+                    const MIDI_OFFSET = -0.45;
+                    const delay = aCtx ? Math.max(0, when - aCtx.currentTime + MIDI_OFFSET) : 0;
+                    setTimeout(() => sendMidiNote(note, vel, dur), delay * 1000);
+                }}
                 playNote={playNote}
                 getCtx={getCtx}
                 onSongEnd={handleSongEnd}
@@ -313,6 +381,7 @@ export default function App() {
                 songDuration={songDuration}
                 editMode={editMode}
                 isCreateMode={isCreateMode}
+                showKeyNames={showKeyNames}
                 onExitEdit={handleExitEdit}
                 onSmartCapture={() => setShowWatchZone(true)}
                 onAddNote={handleAddNote}
@@ -346,6 +415,11 @@ export default function App() {
                 onToggleLoop={() => setLoop(l => !l)}
                 hiddenHands={hiddenHands}
                 onToggleHideHand={(hand) => setHiddenHands(h => ({ ...h, [hand]: !h[hand] }))}
+                showKeyNames={showKeyNames}
+                onToggleKeyNames={() => setShowKeyNames(v => !v)}
+                midiOutputs={midiOutputs}
+                selectedMidiOutput={selectedMidiOutput}
+                onMidiOutputChange={setSelectedMidiOutput}
             />
             {showWatchZone && (
                 <WatchZone

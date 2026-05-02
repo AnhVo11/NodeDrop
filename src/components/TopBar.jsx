@@ -156,7 +156,9 @@ export default function TopBar({
     songTitle, isCreateMode,
     loop, onToggleLoop,
     hiddenHands, onToggleHideHand,
-    editMode,
+   editMode,
+    showKeyNames, onToggleKeyNames,
+    midiOutputs, selectedMidiOutput, onMidiOutputChange,
 }) {
     const [gearOpen, setGearOpen] = useState(false);
     const [libraryOpen, setLibraryOpen] = useState(false);
@@ -265,6 +267,10 @@ export default function TopBar({
                                     onClick={() => { onLoadSong('kiss'); setLibraryOpen(false); }}>
                                     <MusicNote /> Kiss the Rain
                                 </button>
+                                <button style={styles.dropItem}
+                                    onClick={() => { onLoadSong('love'); setLibraryOpen(false); }}>
+                                    <MusicNote /> Love Story 
+                                </button>
                             </div>
                         )}
                     </div>
@@ -281,8 +287,8 @@ export default function TopBar({
                             <Gear />
                         </button>
 
-                        {gearOpen && (
-                            <div style={styles.dropdown}>
+                       {gearOpen && (
+                            <div style={{ ...styles.dropdown, maxHeight: '80vh', overflowY: 'auto' }}>
                                 {/* View zoom */}
                                 <div style={{ padding: '8px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -329,8 +335,40 @@ export default function TopBar({
                                     <FileMusic /> Save MIDI
                                 </button>
 
+                               <div style={styles.dropDivider} />
+                               {midiOutputs.length > 0 && (
+                                    <div style={{ padding: '8px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                        <span style={styles.lbl}>MIDI OUTPUT</span>
+                                        <select
+                                            value={selectedMidiOutput?.id ?? ''}
+                                            onChange={e => {
+                                                const out = midiOutputs.find(o => o.id === e.target.value) || null;
+                                                onMidiOutputChange(out);
+                                            }}
+                                            style={{
+                                                background: '#1a1a2e',
+                                                border: '1px solid rgba(201,168,76,0.3)',
+                                                color: '#c9a84c', borderRadius: 4,
+                                                padding: '4px 8px', fontSize: 10,
+                                                letterSpacing: 1, fontFamily: 'inherit',
+                                                cursor: 'pointer',
+                                            }}>
+                                            <option value=''>— None —</option>
+                                            {midiOutputs.map(o => (
+                                                <option key={o.id} value={o.id}>{o.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
                                 <div style={styles.dropDivider} />
-
+                                <button style={{
+                                    ...styles.dropItem,
+                                    color: showKeyNames ? '#c9a84c' : 'rgba(201,168,76,0.5)',
+                                    
+                                    background: showKeyNames ? 'rgba(201,168,76,0.08)' : 'transparent',
+                                }} onClick={() => { onToggleKeyNames(); setGearOpen(false); }}>
+                                    <MusicNote /> Key Names {showKeyNames ? '✓' : ''}
+                                </button>
 
                             </div>
                         )}
