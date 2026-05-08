@@ -6,10 +6,10 @@ Inspired by the iOS app "Piano 3D" (now removed from App Store).
 Falling notes learning — no sheet music needed, learn by watching colored bars fall.
 
 ## Repo
-- GitHub: `https://github.com/AnhVo11/NoteDrop` (note: local folder is `notedrop` lowercase)
+- GitHub: `https://github.com/AnhVo11/NoteDrop`
 - Local path: `/Users/anhvo/Desktop/notedrop`
 - Run: `npm start` → opens at `http://localhost:3000`
-- Test on iPad: ipconfig getifaddr en0 (same WiFi)
+- Test on iPad: `http://192.168.1.79:3000` (same WiFi)
 
 ## Tech Stack
 - **React** (Create React App)
@@ -17,121 +17,131 @@ Falling notes learning — no sheet music needed, learn by watching colored bars
 - **Web Audio API** — for scheduling
 - **HTML5 Canvas** — all visuals drawn in game loop
 - **Pure CSS-in-JS** — no CSS files except `index.css`
+- **Web MIDI API** — sends MIDI to external devices (Chrome on Mac only, not iOS)
 
 ## File Structure
-```
 src/
-├── App.jsx                  ← main state, song loading, handlers
+├── App.jsx                  ← main state, song loading, handlers, MIDI output
 ├── index.js / index.css
 ├── components/
-│   ├── PianoCanvas.jsx      ← canvas game loop, drawing, scrub gesture
+│   ├── PianoCanvas.jsx      ← canvas game loop, drawing, scrub/pinch gesture
 │   ├── EditOverlay.jsx      ← all edit mode logic + toolbar UI
-│   ├── TopBar.jsx           ← top navigation bar
+│   ├── CreateOverlay.jsx    ← create song mode overlay
+│   ├── TopBar.jsx           ← top navigation bar + gear dropdown settings
+│   ├── WatchZone.jsx        ← NoteReader screen capture component
 │   └── PianoKeys.jsx        ← piano key math helpers (exported functions)
 ├── hooks/
 │   ├── useAudio.js          ← Tone.js sampler, playNote, scheduleNote, setPedal
 │   ├── useMidi.js           ← MIDI file parser (parseMidi function)
+│   ├── useExportMidi.js     ← MIDI export (exportMidi function)
 │   └── useEditHistory.js    ← undo/redo stack (pushUndo, undo, redo)
-└── data/
-    └── furElise.js          ← built-in demo song (not used currently)
 
 public/
 └── midi/
     ├── chopin.mid           ← Chopin Nocturne E Flat Major (default)
     ├── river.mid            ← Yiruma - River Flows in You
     └── kiss.mid             ← Yiruma - Kiss the Rain
-```
 
 ## Key Constants
 - `MIN_NOTE = 21` (A0), `MAX_NOTE = 108` (C8) — full 88 keys
 - `KEY_H = 130` — piano keyboard height at bottom
 - `BAR_H = 56` — top bar height
-- `LOOK_AHEAD_VIS = 4.5` — seconds of notes visible ahead
 - `PIXELS_PER_SECOND = 120` — scrub sensitivity
 
 ## Features Built
+
 ### Playback
-- Falling notes (blue = right hand, gold = left hand, colors customizable)
+- Falling notes (gold = right hand, red = left hand, colors customizable per hand)
 - Real grand piano sound via Tone.js Salamander samples
 - Play/Pause/Restart controls
 - Speed slider (0.25x to 2.0x)
-- Zoom slider (100% to 400%) — zooms piano width
+- Loop toggle
+- View zoom slider (100–300%) — zooms note fall speed/lookahead
+- Keys zoom slider (100–200%) — zooms piano key width
+- Pinch gesture: horizontal = key zoom (min 100%), vertical = view zoom (min 100%, max 200%)
+- Horizontal pan when keys zoomed in
+
+### MIDI Output (Mac Chrome only)
+- Web MIDI API sends notes to external MIDI devices
+- Gear dropdown shows MIDI OUTPUT selector when devices connected
+- Sustain pedal CC64 sent on channel 0 with 80ms debounce on pedal-off
+- MIDI_OFFSET = -0.15s (sends notes early to compensate piano latency)
+- Restart sends sustain-off + all-notes-off
+- Tested with Yamaha PPC10R → MX90RW piano
+- Does NOT work on iPad/iOS (Apple blocks Web MIDI in all browsers)
+
+### Key Names
+- Toggle in Gear dropdown: "Key Names ✓"
+- Shows note names (A, A#, B, C...) on piano keys
+- Shows note names on falling notes (when note tall/wide enough)
+- White keys: black text, black keys: white text
 
 ### Navigation
-- **Vertical scroll** on canvas = scrub through song timeline
-- **Red progress bar** at bottom above keys = YouTube-style playhead, draggable
-- Time display (current / total)
+- Vertical scroll on canvas = scrub through song timeline
+- Red progress bar at top = draggable playhead
+- Time display (current position)
 
 ### Sustain Pedal
 - MIDI pedal events parsed and tracked
-- Red dot indicator "SUSTAIN" shown when pedal is active
-- **Full Sustain** button = override entire song with sustain
-- Sustain affects audio via Tone.js triggerAttack (notes ring, no hard cut on release)
+- Red dot indicator "SUSTAIN" shown when active
+- Full Sustain button = override entire song with sustain
+- MIDI CC64 sent to external piano
 
 ### Song Loading
-- Gear ⚙ button dropdown contains:
-  - Built-in songs (Chopin, River Flows in You, Kiss the Rain)
-  - Load MIDI file from device
-  - Edit Song mode
-
-### Piano Keys
-- Full 88 keys rendered on canvas (not SVG anymore)
-- Keys highlight with note color when active
-- Keys light up during scrub too
+- Gear dropdown: built-in songs, Load MIDI, Edit Song, Save MIDI
+- Library button: Chopin, River Flows in You, Kiss the Rain
+- Auto-detects single vs two-track MIDI (single = all gold, two = gold+red)
 
 ### Edit Mode
-Entered via Gear → Edit Song. Song auto-pauses.
-Toolbar appears at top (below nav bar), height: 64px.
+- Smart tool: tap empty = add, tap top/bottom = resize, tap middle = move
+- Delete tool: swipe to delete with particle explosion
+- Pedal tool: draw/edit sustain regions
+- Undo/Redo (50 levels)
 
-**Smart tool (default — no button selected):**
-- Tap empty space → ADD note (drag up/down to set length)
-- Tap top of note → RESIZE from top (drag up = extend earlier)
-- Tap bottom of note → RESIZE from bottom (drag down = extend later)
-- Tap middle of note (•••) → MOVE note (up/down = time, left/right = pitch)
+### Create Song Mode
+- Start fresh with empty song
+- WatchZone (NoteReader) button to capture from screen
+- Save as MIDI with custom name
 
-**Tool buttons (toggleable — click again to deselect):**
-- **- DELETE** — swipe across notes to delete with particle explosion
-- **🎹 PEDAL** — draw/edit sustain pedal regions on timeline:
-  - Drag up/down = draw new red pedal region
-  - Grab short red line inside top of region = resize top edge
-  - Grab short red line inside bottom of region = resize bottom edge
-  - Grab circle in middle = move whole region
-  - Tap region (no drag) = delete it
-  - Regions only visible when PEDAL tool is active
+### NoteReader (WatchZone)
+Two scan modes:
 
-**Undo ↩ / Redo ↪** — up to 50 levels
+**Falling Notes mode:**
+- Yellow scan zone, dashed trigger line
+- Background color calibration (click empty area)
+- Fill % or Point detection
+- Tolerance slider (5–100, default 35) — how different pixel must be from BG
+- Fill% threshold slider
+- Smart filter (suppress adjacent false notes)
+- Hollow notes mode (detect outline-style notes)
+- Save/load named configs to localStorage
 
-**Visual indicators on notes in edit mode:**
-- White bar at top = resize handle
-- White bar at bottom = resize handle
-- Three dots ••• in middle = drag to move
+**Piano Keys mode:**
+- Red scan line across piano
+- Per-key equal-width column detection
+- Auto Detect button: samples white/black key colors from scan line
+- Manual white/black key color sampling
+- Tolerance + Hit Ratio sliders
+- Per-key baseline captured on record start
+- Virtual piano overlay shows detected keys in green during recording
 
-## Note Data Structure
-```js
-{
-  note: 60,          // MIDI note number
-  startTime: 1.5,    // seconds from song start
-  duration: 0.4,     // seconds
-  vel: 0.7,          // velocity 0-1
-  hand: 0,           // 0 = right, 1 = left
-  isPedal: false,    // true for pedal events
-  sustain: false,    // legacy, no longer used
-}
-// Pedal events:
-{ isPedal: true, startTime: 1.0, duration: 0, vel: 127, note: -1, hand: 0 } // pedal ON
-{ isPedal: true, startTime: 3.0, duration: 0, vel: 0,   note: -1, hand: 0 } // pedal OFF
-```
+**Config Save/Load:**
+- Named configs saved to localStorage key `watchZoneConfigs`
+- Save button in calibrate panel (both modes)
+- Load dropdown in setup panel
+- Saves: zone, scanType, anchors, trims, colors, all thresholds
 
 ## Collaboration Style
 - **Surgical edits preferred** — "find X, replace with Y" not full rewrites
-- Only give full file rewrite when many things change at once
+- Always specify which file first (App.jsx, WatchZone.jsx, etc.)
 - User pastes relevant file/error when asking for fixes
-- Build command: `npm start`
+- Build: `npm start`
 - User is Anh, works on Mac, tests on iPad (same WiFi)
 
 ## Known Issues / Next Ideas
-- Export edited song as MIDI file
-- More built-in songs
-- Song name editor
-- GitHub Pages hosting so friends can access via URL
+- WatchZone baseline sometimes captures wrong colors if video not ready
+- Debug console.log statements still in WatchZone (KEY ratios, ACTIVE keys, BASELINE SAMPLE)
+- Web MIDI not available on iPad (Apple restriction)
+- GitHub Pages hosting
 - Note velocity editing
+- More built-in songs

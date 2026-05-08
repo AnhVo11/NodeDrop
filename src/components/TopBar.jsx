@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SkipStart, Play, Pause, Infinity, Gear, Book, CloudArrowDown, Pencil, HandIndex, MusicNote, FileMusic } from 'react-bootstrap-icons';
+import { SkipStart, SkipEnd, Play, Pause, Infinity, Gear, Book, CloudArrowDown, Pencil, HandIndex, MusicNote, FileMusic } from 'react-bootstrap-icons';
 
 const styles = {
     bar: {
@@ -147,7 +147,7 @@ function HandColorButton({ rightColor, onRightColorChange, leftColor, onLeftColo
 }
 
 export default function TopBar({
-    isPlaying, onPlayPause, onRestart, onMidiLoad, onLoadSong,
+    isPlaying, onPlayPause, onRestart, onNextSong, onMidiLoad, onLoadSong,
     tempo, onTempoChange, zoom, onZoomChange, keyZoom, onKeyZoomChange,
     fullPedal, onToggleFullPedal,
     rightColor, onRightColorChange,
@@ -194,9 +194,10 @@ export default function TopBar({
                 {/* Center — go to start + play/pause + loop */}
                 <div style={styles.center}>
                     <button style={styles.btn} onClick={onRestart} title="Go to beginning"><SkipStart /></button>
-                    <button style={styles.btnLarge} onClick={onPlayPause}>
+                 <button style={styles.btnLarge} onClick={onPlayPause}>
                         {isPlaying ? <Pause /> : <Play />}
                     </button>
+                    <button style={styles.btn} onClick={onNextSong} title="Next song"><SkipEnd /></button>
                     <button
                         style={{
                             ...styles.btn,

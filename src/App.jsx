@@ -9,6 +9,7 @@ import WatchZone from './components/WatchZone';
 
 const MIN_NOTE = 21;
 const MAX_NOTE = 108;
+const SONG_KEYS = ['chopin', 'river', 'kiss', 'love'];
 
 export default function App() {
     const { initAudio, playNote, scheduleNote, getCtx, setPedal } = useAudio();
@@ -21,6 +22,8 @@ export default function App() {
     const [song, setSong] = useState([]);
     const [noteObjs, setNoteObjs] = useState([]);
     const [songTitle, setSongTitle] = useState('Chopin - Nocturne in E Flat Major');
+    const songKeyRef = useRef('chopin');
+    const autoPlayRef = useRef(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [playOffset, setPlayOffset] = useState(0);
     const [playStart, setPlayStart] = useState(0);
@@ -45,6 +48,7 @@ export default function App() {
     const [midiOutputs, setMidiOutputs] = useState([]);
     const [selectedMidiOutput, setSelectedMidiOutput] = useState(null);
     const midiOutputRef = useRef(null);
+    const pedalOffTimerRef = useRef(null);
     const stateRef = useRef({});
     stateRef.current = { isPlaying, playOffset, playStart, tempoScale };
 
@@ -93,12 +97,25 @@ export default function App() {
             setSong(notes);
             setNoteObjs(notes.map(n => ({ ...n, sliced: false })));
             setSongTitle(title);
+            songKeyRef.current = key;
 
             setIsPlaying(false);
             setPlayOffset(0);
             setPlayStart(0);
             setScheduled(new Set());
             setActiveKeys(new Map());
+
+            if (autoPlayRef.current) {
+                autoPlayRef.current = false;
+                setTimeout(() => {
+                    initAudio();
+                    const aCtx = getCtx();
+                    if (aCtx) {
+                        setPlayStart(aCtx.currentTime);
+                        setIsPlaying(true);
+                    }
+                }, 100);
+            }
 
         } catch (err) {
             console.error('Failed to load song:', err);
@@ -142,17 +159,19 @@ export default function App() {
         return () => clearInterval(interval);
     }, [fullPedal, hasPedal, song, getCurrentTime]);
 
+
     useEffect(() => {
         setPedal(isPedalOn);
         const out = midiOutputRef.current;
         if (out) {
             try {
-                // Only send sustain-off if we're sure pedal is released
-                // Add small delay on sustain-off to prevent false triggers
                 if (isPedalOn) {
+                    clearTimeout(pedalOffTimerRef.current);
+                    pedalOffTimerRef.current = null;
                     out.send([0xB0, 64, 127]);
                 } else {
-                    setTimeout(() => {
+                    pedalOffTimerRef.current = setTimeout(() => {
+                        pedalOffTimerRef.current = null;
                         if (!midiOutputRef.current) return;
                         midiOutputRef.current.send([0xB0, 64, 0]);
                     }, 80);
@@ -183,21 +202,30 @@ export default function App() {
         }
     }, [isPlaying, playOffset, song, initAudio, getCtx, getCurrentTime]);
 
-    const handleRestart = useCallback(() => {
+   const handleRestart = useCallback(() => {
+        const out = midiOutputRef.current;
+        if (out) {
+            try {
+                out.send([0xB0, 64, 0]);
+                out.send([0xB0, 123, 0]);
+            } catch (e) { }
+        }
+        // If already at beginning, go to previous song
+        if (getCurrentTime() < 1.0) {
+            const idx = SONG_KEYS.indexOf(songKeyRef.current);
+            const prev = SONG_KEYS[(idx - 1 + SONG_KEYS.length) % SONG_KEYS.length];
+            loadSong(prev);
+            return;
+        }
+        // Otherwise go to beginning
         setIsPlaying(false);
         setPlayOffset(0);
         setPlayStart(0);
         setScheduled(new Set());
         setActiveKeys(new Map());
         setNoteObjs(song.map(n => ({ ...n, sliced: false })));
-        const out = midiOutputRef.current;
-        if (out) {
-            try {
-                out.send([0xB0, 64, 0]); // sustain off
-                out.send([0xB0, 123, 0]); // all notes off
-            } catch (e) { }
-        }
-    }, [song]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [song, getCurrentTime]);
 
     const handleSongEnd = useCallback(() => {
         if (loop) {
@@ -211,9 +239,18 @@ export default function App() {
             setPlayOffset(0);
             setScheduled(new Set());
             setNoteObjs(song.map(n => ({ ...n, sliced: false })));
+            autoPlayRef.current = true;
+            const idx = SONG_KEYS.indexOf(songKeyRef.current);
+            const next = SONG_KEYS[(idx + 1) % SONG_KEYS.length];
+            loadSong(next);
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [song, loop, getCtx]);
-
+    const handleNextSong = () => {
+        const idx = SONG_KEYS.indexOf(songKeyRef.current);
+        const next = SONG_KEYS[(idx + 1) % SONG_KEYS.length];
+        loadSong(next);
+    };
     const handleTempoChange = useCallback(val => {
         const aCtx = getCtx();
         if (isPlaying && aCtx) {
@@ -412,6 +449,7 @@ export default function App() {
                 songTitle={songTitle.toUpperCase()}
                 editMode={editMode}
                 loop={loop}
+                onNextSong={handleNextSong}
                 onToggleLoop={() => setLoop(l => !l)}
                 hiddenHands={hiddenHands}
                 onToggleHideHand={(hand) => setHiddenHands(h => ({ ...h, [hand]: !h[hand] }))}
